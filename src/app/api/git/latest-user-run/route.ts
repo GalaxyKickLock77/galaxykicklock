@@ -8,8 +8,8 @@ import {
   GitHubRunJobsResponse 
 } from '@/lib/githubApiUtils';
 
-const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
-const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
+const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock77';
+const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'galaxykicklock';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
 interface ClientSafeRunResponse { // Fields adjusted
