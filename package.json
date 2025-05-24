@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-     "build": "next build --output public"
+     "build": "next build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
