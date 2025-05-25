@@ -104,7 +104,8 @@ export default function RootLayout({
     }
 
     // Initialize Supabase client for client-side real-time updates
-    if (supabaseUrl && supabaseAnonKey) {
+    // Only subscribe to session updates if not on an admin page
+    if (supabaseUrl && supabaseAnonKey && !pathname.startsWith('/admin')) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       const channel = supabase.channel('session_updates');
 
@@ -127,7 +128,7 @@ export default function RootLayout({
       return () => {
         channel.unsubscribe();
       };
-    } else {
+    } else if (!pathname.startsWith('/admin')) {
       console.error('Supabase client not initialized in RootLayout due to missing env vars (NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY).');
     }
   }, [fetchDeploymentStatus, handleStaleSession, pathname]);
