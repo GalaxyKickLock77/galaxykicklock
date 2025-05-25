@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateSession } from '@/lib/auth'; // Assuming @/ is configured for src/
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // Server-side environment variable
-const ORG = process.env.GITHUB_ORG || 'GalaxyKickLock'; // SECURITY FIX: Use server-side only env var
-const REPO = process.env.GITHUB_REPO || 'GalaxyKickPipeline'; // SECURITY FIX: Use server-side only env var
+const ORG = process.env.GITHUB_ORG || 'galaxykicklock7'; // SECURITY FIX: Use server-side only env var
+const REPO = process.env.GITHUB_REPO || 'GalaxyKickPipeline7'; // SECURITY FIX: Use server-side only env var
 const WORKFLOW_FILE_NAME = process.env.GITHUB_WORKFLOW_FILE || 'blank.yml'; // SECURITY FIX: Use server-side only env var
 
 export async function POST(request: NextRequest) {

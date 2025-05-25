@@ -5,8 +5,8 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 // For a library, it might be better to pass them as arguments or have a config object
 // For now, assuming they are accessible as process.env here as well, or they will be passed.
 // Let's define them here for clarity, ensure your .env.local or environment setup has them.
-const ORG = process.env.GITHUB_ORG || 'GalaxyKickLock'; // SECURITY FIX: Use server-side only env var
-const REPO = process.env.GITHUB_REPO || 'GalaxyKickPipeline'; // SECURITY FIX: Use server-side only env var
+const ORG = process.env.GITHUB_ORG || 'galaxykicklock7'; // SECURITY FIX: Use server-side only env var
+const REPO = process.env.GITHUB_REPO || 'GalaxyKickPipeline7'; // SECURITY FIX: Use server-side only env var
 // WORKFLOW_FILE_NAME is used when listing runs for a specific workflow.
 
 export const GITHUB_API_BASE_URL = 'https://api.github.com';
