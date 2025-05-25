@@ -8,6 +8,7 @@ export interface UserSession {
   deployTimestamp?: string | null; // ISO string format for timestamp
   activeFormNumber?: number | null;
   tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
+  lastLogoutAt?: string | null; // Add last_logout_at to session object type
 }
 
 const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Server-side only
@@ -89,6 +90,41 @@ export async function validateSession(request: NextRequest): Promise<UserSession
   } catch (error: any) {
     console.error('Exception during session validation (validateSession):', error.message);
     return null;
+  }
+}
+
+/**
+ * Updates the last_logout_at timestamp for a user in Supabase.
+ * @param userId The ID of the user to update.
+ * @param timestamp The timestamp (ISO string) to set, or null to clear.
+ * @returns True if successful, false otherwise.
+ */
+export async function updateUserLogoutTimestamp(
+  userId: string,
+  timestamp: string | null
+): Promise<boolean> {
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.error('Supabase client not initialized in updateUserLogoutTimestamp due to missing env vars (URL or Service Key).');
+    return false;
+  }
+
+  const supabaseService = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+  try {
+    const { error } = await supabaseService
+      .from('users')
+      .update({ last_logout_at: timestamp })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Error updating user logout timestamp in Supabase (updateUserLogoutTimestamp):', error.message);
+      return false;
+    }
+    console.log(`Logout timestamp updated for user ${userId}: ${timestamp}`);
+    return true;
+  } catch (error: any) {
+    console.error('Exception during user logout timestamp update (updateUserLogoutTimestamp):', error.message);
+    return false;
   }
 }
 
