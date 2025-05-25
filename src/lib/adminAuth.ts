@@ -49,42 +49,28 @@ export async function validateAdminSession(request: NextRequest): Promise<AdminS
   const supabaseServiceAdmin: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
-    // Validate admin existence and session details against admin_sessions table
-    const { data: adminSessionRecord, error: sessionError } = await supabaseServiceAdmin
-      .from('admin_sessions')
-      .select('admin_id, session_id, session_token, expires_at')
-      .eq('admin_id', adminId)
+    // Validate admin existence and session details directly against the 'admin' table
+    const { data: adminUserRecord, error: adminUserError } = await supabaseServiceAdmin
+      .from('admin')
+      .select('id, username, session_id, session_token, session_expires_at') // Select session columns from admin table
+      .eq('id', adminId)
+      .eq('username', adminUsername)
       .eq('session_id', adminSessionId)
       .eq('session_token', adminSessionToken)
       .single();
 
-    if (sessionError || !adminSessionRecord) {
-      console.error('Admin session validation failed (session record not found or DB error):', sessionError?.message);
+    if (adminUserError || !adminUserRecord) {
+      console.error('Admin session validation failed (admin user or session details not found/matched in admin table):', adminUserError?.message);
       return null;
     }
 
     // Check if session has expired
     const now = new Date();
-    const expiresAt = new Date(adminSessionRecord.expires_at);
-    if (now > expiresAt) {
+    const sessionExpiresAt = new Date(adminUserRecord.session_expires_at); // Use session_expires_at
+    if (now > sessionExpiresAt) {
       console.log('Admin session expired for adminId:', adminId);
-      // Optionally, delete the expired session from the DB here
-      await supabaseServiceAdmin.from('admin_sessions').delete().eq('session_id', adminSessionId);
-      return null;
-    }
-
-    // Additionally, verify the admin user still exists in the 'admin' table
-    const { data: adminUserRecord, error: adminUserError } = await supabaseServiceAdmin
-      .from('admin')
-      .select('id, username')
-      .eq('id', adminId)
-      .eq('username', adminUsername)
-      .single();
-
-    if (adminUserError || !adminUserRecord) {
-      console.error('Admin session validation failed (admin user not found in admin table):', adminUserError?.message);
-      // If the user record is gone but session exists, invalidate the session
-      await supabaseServiceAdmin.from('admin_sessions').delete().eq('session_id', adminSessionId);
+      // Optionally, clear expired session data from the admin table
+      await supabaseServiceAdmin.from('admin').update({ session_id: null, session_token: null, session_expires_at: null }).eq('id', adminId);
       return null;
     }
 

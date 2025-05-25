@@ -30,58 +30,58 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: 'userId and token query parameters are required.' }, { status: 400 });
     }
 
-    // 1. Delete the token from the tokengenerate table by its value
+    // 1. Delete the token from the tokengenerate table
     const { error: tokenDeleteError } = await supabase
       .from('tokengenerate')
       .delete()
       .eq('token', tokenValue);
 
     if (tokenDeleteError) {
-      console.error(`Error deleting token ${tokenValue} from tokengenerate:`, tokenDeleteError.message);
-      // Proceed to nullify in users table even if this fails, or decide on stricter error handling
+      console.error(`Error deleting token ${tokenValue} from tokengenerate table:`, tokenDeleteError.message);
+      return NextResponse.json({ message: `Failed to delete token: ${tokenDeleteError.message}` }, { status: 500 });
     }
 
-    // 2. Update the users table to set token = null for the user
-    // Assuming 'token' is the column in 'users' table that might store this token value.
-    // If the 'users.token' column is meant for something else (e.g. signup token), adjust this logic.
-    // The client code was doing this, so replicating the intent.
-    const { error: userUpdateError }: { error: any } = await supabase
+    // 2. Update the users table to set the 'token' column to null and 'token_removed' to true for the user
+    const { error: userUpdateError } = await supabase
       .from('users')
-      .update({ token: null }) 
+      .update({ token: null, token_removed: true }) // Set the token column to null and token_removed to true
       .eq('id', userId)
-      .eq('token', tokenValue); // Ensure we only nullify if it matches the token being deleted
+      .eq('token', tokenValue); // Ensure we only update if it matches the token being removed
 
     if (userUpdateError) {
-      console.error(`Error nullifying token for user ${userId}:`, userUpdateError.message);
-      return NextResponse.json({ message: `Failed to nullify token for user: ${userUpdateError.message}` }, { status: 500 });
+      console.error(`Error updating token and token_removed status for user ${userId} in users table:`, userUpdateError.message);
+      return NextResponse.json({ message: `Failed to unlink token from user: ${userUpdateError.message}` }, { status: 500 });
     }
 
-    // If tokenDeleteError occurred but userUpdateError did not, it's a partial success.
-    if (tokenDeleteError && !userUpdateError) {
-        return NextResponse.json({ message: `Failed to delete token from generation table, but token nullified for user: ${tokenDeleteError.message}` }, { status: 207 });
+    // 3. Send a Supabase broadcast event to the user's channel
+    try {
+      await supabase
+        .channel('session_updates')
+        .send({
+          type: 'broadcast',
+          event: 'token_expired', // Keep this event as it triggers client-side logout/undeploy
+          payload: { userId: userId, reason: 'admin_removed_token' }
+        });
+      console.log(`[AdminTokenLinkRoute] Broadcasted token_expired for user ${userId} after admin deletion.`);
+    } catch (broadcastEx: any) {
+      console.error(`[AdminTokenLinkRoute] Exception during token_expired broadcast for user ${userId}:`, broadcastEx.message);
     }
-    else if (!tokenDeleteError && userUpdateError) { // Should have been caught above, but for completeness
-        return NextResponse.json({ message: `Token deleted from generation table, but failed to nullify for user: ${userUpdateError?.message || 'Unknown error'}` }, { status: 207 });
-    }
 
+    return NextResponse.json({ message: 'Token deleted and user unlinked successfully.' }, { status: 200 });
 
-    return NextResponse.json({ message: 'Token link removed successfully.' }, { status: 200 });
-
-  } catch (error: unknown) { // Changed from any to unknown for better type safety
-    let errorMessage = 'An unexpected error occurred while removing user token link.';
+  } catch (error: unknown) {
+    let errorMessage = 'An unexpected error occurred while deleting user token link.';
     if (error instanceof Error) {
       errorMessage = error.message;
     } else if (typeof error === 'string') {
       errorMessage = error;
     } else if (error && typeof (error as any).message === 'string') {
-      // Attempt to get message if it's an object with a message property
       errorMessage = (error as any).message;
     }
-    console.error('Error in /api/admin/user-token-link DELETE route:', errorMessage, error); // Log the original error too
+    console.error('Error in /api/admin/user-token-link DELETE route:', errorMessage, error);
     
-    // Explicitly type the payload object
     const errorPayload: { message: string; errorDetail?: string } = {
-      message: 'Failed to remove user token link.',
+      message: 'Failed to delete user token link.',
       errorDetail: errorMessage 
     };
     return NextResponse.json(errorPayload, { status: 500 });

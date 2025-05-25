@@ -54,8 +54,8 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   let locaLtStopSuccess = true; // Assume success if no loca.lt stop is needed or if it succeeds
   let locaLtMessage = "No loca.lt service stop required or attempted.";
 
-  // Attempt to stop loca.lt service ONLY if activeFormNumber is present and valid
-  if (deployTimestamp && activeFormNumber && activeFormNumber > 0) { // Assuming form numbers are > 0
+  // Attempt to stop loca.lt service ONLY if activeFormNumber is present and valid (including 0 for main deployment)
+  if (deployTimestamp && typeof activeFormNumber === 'number' && activeFormNumber >= 0) { 
     const logicalUsername = getLogicalUsername({ username: usernameForLogical });
     if (logicalUsername.startsWith('invalid_user_')) {
       console.error(`[ServerUndeploy] Cannot stop loca.lt for user ${userId}: username missing.`);
@@ -72,12 +72,12 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
           body: JSON.stringify({}),
         });
         if (undeployResponse.ok) {
-          console.log(`[ServerUndeploy] Successfully sent stop command to loca.lt for user ${userId}, form ${activeFormNumber}.`);
+          console.log(`[ServerUndeploy] Successfully sent stop command to loca.lt for user ${userId}, form ${activeFormNumber}. Status: ${undeployResponse.status}`);
           locaLtMessage = `loca.lt service for form ${activeFormNumber} stop command sent.`;
         } else {
           locaLtStopSuccess = false;
           const errorText = await undeployResponse.text();
-          locaLtMessage = `Failed to send stop command to loca.lt (form ${activeFormNumber}): ${undeployResponse.status} ${errorText}`;
+          locaLtMessage = `Failed to send stop command to loca.lt (form ${activeFormNumber}): Status ${undeployResponse.status}, Response: ${errorText}`;
           console.error(`[ServerUndeploy] ${locaLtMessage}`);
         }
       } catch (e: any) {
@@ -103,7 +103,7 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       } else {
         githubCancelSuccess = false;
         const errorText = await cancelApiResponse.text().catch(() => `Status ${cancelApiResponse.status}`);
-        githubCancelMessage = `Failed to send cancellation request for GitHub run ${activeRunId}: ${cancelApiResponse.status} ${errorText}.`;
+        githubCancelMessage = `Failed to send cancellation request for GitHub run ${activeRunId}: Status ${cancelApiResponse.status}, Response: ${errorText}.`;
         console.error(`[ServerUndeploy] ${githubCancelMessage}`);
       }
     } catch (cancelError: any) {

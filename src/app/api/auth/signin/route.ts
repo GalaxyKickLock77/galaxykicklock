@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     if (attempts.length >= MAX_ATTEMPTS_PER_MINUTE) {
       const timeSinceLastAttempt = currentTime - attempts[attempts.length - 1];
-      const timeLeftToWait = BLOCK_DURATION_MS - timeSinceLastAttempt;
+      const timeLeftToWait = Math.max(0, BLOCK_DURATION_MS - timeSinceLastAttempt); // Ensure timeLeftToWait is not negative
       if (timeLeftToWait > 0) {
         console.warn(`Rate limit exceeded for user ${sanitizedUsername}. Blocking for ${timeLeftToWait / 1000}s.`);
         return NextResponse.json({ message: `Too many login attempts. Please try again in ${Math.ceil(timeLeftToWait / 1000)} seconds.` }, { status: 429 });
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user, error: authError } = await supabaseService
       .from("users")
-      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout") // Change last_logout_at to last_logout
+      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout, token_removed")
       .eq("username", username)
       .single();
 
@@ -84,12 +84,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Invalid credentials.' }, { status: 401 });
     }
 
+    // Check if the user's token has been removed by an admin
+    if (user.token_removed) {
+      console.warn(`Login attempt for user ${sanitizedUsername} blocked: Token removed by admin.`);
+      return NextResponse.json({ message: 'Please renew the token to login the application.' }, { status: 403 });
+    }
+
     // --- Logout Cooldown Check ---
-    if (user.last_logout) { // Change last_logout_at to last_logout
+    if (user.last_logout) {
       const lastLogoutTime = new Date(user.last_logout).getTime(); // Change last_logout_at to last_logout
       const timeSinceLogout = currentTime - lastLogoutTime;
       if (timeSinceLogout < (COOLDOWN_SECONDS * 1000)) {
-        const timeLeft = (COOLDOWN_SECONDS * 1000) - timeSinceLogout;
+        const timeLeft = Math.max(0, (COOLDOWN_SECONDS * 1000) - timeSinceLogout); // Ensure timeLeft is not negative
         console.warn(`User ${sanitizedUsername} attempting to login too soon after logout. Blocking for ${timeLeft / 1000}s.`);
         return NextResponse.json({ message: `Please wait ${Math.ceil(timeLeft / 1000)} seconds before logging in again.` }, { status: 429 });
       }

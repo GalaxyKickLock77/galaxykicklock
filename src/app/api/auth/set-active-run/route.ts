@@ -46,9 +46,8 @@ export async function POST(request: NextRequest) {
 
     const newDeployTimestamp = new Date().toISOString();
     // Assuming active_form_number can be null for the main GitHub deployment context
-    // Or use a convention like 0 if null is not appropriate for your DB/logic.
-    // Let's use null for active_form_number to indicate it's the overall deployment.
-    const formNumberForMainDeployment = null; 
+    // Use 0 as a convention for the main GitHub deployment context
+    const formNumberForMainDeployment = 0; 
 
     const success = await updateUserDeployStatus(
       session.userId,

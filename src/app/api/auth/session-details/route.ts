@@ -12,46 +12,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Authentication required.' }, { status: 401 });
   }
 
-  let tokenExpiresAtFromDb: string | number | Date | null = null;
-
-  if (supabaseUrl && supabaseServiceRoleKey) {
-    const supabaseService = createClient(supabaseUrl, supabaseServiceRoleKey);
-    try {
-      // Query the 'tokengenerate' table for the user's token expiry
-      // Assuming 'userid' in 'tokengenerate' matches 'session.userId'
-      // And the column is named 'expiresat'
-      const { data: tokenData, error: tokenError } = await supabaseService
-        .from('tokengenerate') // Your table name for token generation
-        .select('expiresat')    // The column name for expiry date
-        .eq('userid', session.userId) // Assuming 'userid' is the foreign key
-        .order('createdat', { ascending: false }) // Corrected column name
-        .limit(1)
-        .single();
-
-      if (tokenError) {
-        console.error('Error fetching token expiry from tokengenerate:', tokenError.message);
-        // Don't fail the whole request, just tokenExpiresAt might be null
-      } else if (tokenData) {
-        tokenExpiresAtFromDb = tokenData.expiresat;
-      }
-    } catch (e) {
-      console.error('Exception fetching token expiry:', e);
-    }
-  } else {
-    console.error('Supabase URL or Service Role Key not configured for session-details API.');
-  }
-  
+  // tokenExpiresAt is now directly available from the session object
+  // as validateSession now fetches it from the tokengenerate table.
   let tokenExpiresAtToSend: string | number | null = null;
-  if (tokenExpiresAtFromDb) {
-    if (tokenExpiresAtFromDb instanceof Date) {
-      tokenExpiresAtToSend = tokenExpiresAtFromDb.toISOString();
+  if (session.tokenExpiresAt) {
+    if (session.tokenExpiresAt instanceof Date) {
+      tokenExpiresAtToSend = session.tokenExpiresAt.toISOString();
     } else {
-      tokenExpiresAtToSend = tokenExpiresAtFromDb; // Assuming it's already string (ISO) or number
+      tokenExpiresAtToSend = session.tokenExpiresAt; // Assuming it's already string (ISO) or number
     }
   }
 
   return NextResponse.json({
-    userId: session.userId, // Add userId to the response
+    userId: session.userId,
     username: session.username,
     tokenExpiresAt: tokenExpiresAtToSend,
   });
