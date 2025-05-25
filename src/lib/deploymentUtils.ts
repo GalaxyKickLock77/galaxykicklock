@@ -42,8 +42,8 @@ export async function performServerSideUndeploy(
   // Ensure Supabase client is available
   let SClient = supabaseService; // Renamed to avoid conflict with 'client' if it's a global/module var
   if (!SClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Use server-side only URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !supabaseServiceRoleKey) {
       console.error('[ServerUndeploy] Supabase client cannot be initialized (missing URL or Service Key).');
       return { success: false, message: 'Server configuration error for undeploy.' };

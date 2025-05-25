@@ -10,9 +10,8 @@ export interface UserSession {
   tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer using module-level anon client
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Added for service client
+const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Server-side only
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // SECURITY FIX: Server-side only
 
 if (!supabaseUrl) {
   console.error('Supabase URL is missing for auth lib. Check environment variables.');

@@ -8,9 +8,9 @@ import {
   GitHubRunJobsResponse 
 } from '@/lib/githubApiUtils';
 
-const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'galaxykicklock7';
-const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline7';
-const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
+const ORG = process.env.GITHUB_ORG || 'GalaxyKickLock'; // SECURITY FIX: Use server-side only env var
+const REPO = process.env.GITHUB_REPO || 'GalaxyKickPipeline'; // SECURITY FIX: Use server-side only env var
+const WORKFLOW_FILE_NAME = process.env.GITHUB_WORKFLOW_FILE || 'blank.yml'; // SECURITY FIX: Use server-side only env var
 
 interface ClientSafeRunResponse { // Fields adjusted
   runId: number;

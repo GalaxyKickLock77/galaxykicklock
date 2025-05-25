@@ -1,34 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
-
-const STORAGE_KEYS = {
-    SESSION_TOKEN: 'sessionToken',
-    USER_ID: 'userId',
-    USERNAME: 'username',
-    SESSION_ID: 'sessionId'
-} as const;
+// SECURITY FIX: Removed client-side Supabase initialization
+// All authentication is now handled server-side via secure HTTP-only cookies
 
 export default function SignInPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
-    const sessionChannel = useRef<any>(null);
 
-    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error') => { // Added 'info' type
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error') => {
         toast[type](message, {
             position: "top-right",
-            autoClose: type === 'info' ? 7000 : 3000, // Longer for info messages
+            autoClose: type === 'info' ? 7000 : 3000,
             hideProgressBar: false,
             closeOnClick: true,
             pauseOnHover: true,
@@ -36,89 +26,6 @@ export default function SignInPage() {
             theme: "dark"
         });
     };
-
-    // generateSessionToken and generateSessionId are now backend responsibilities.
-
-    const clearSessionStorage = () => {
-        Object.values(STORAGE_KEYS).forEach(key => sessionStorage.removeItem(key));
-    };
-
-    interface SessionData {
-        userId: string | null;
-        sessionToken: string | null;
-        username: string | null;
-        sessionId: string | null;
-    }
-
-    const getSessionData = (): SessionData => ({
-        userId: sessionStorage.getItem(STORAGE_KEYS.USER_ID),
-        sessionToken: sessionStorage.getItem(STORAGE_KEYS.SESSION_TOKEN),
-        username: sessionStorage.getItem(STORAGE_KEYS.USERNAME),
-        sessionId: sessionStorage.getItem(STORAGE_KEYS.SESSION_ID)
-    });
-
-    const handleSessionTermination = async (message: string = "Your session has ended.") => {
-        const sessionData = getSessionData(); // Gets { userId, sessionToken, username, sessionId }
-        
-        if (sessionData.userId && sessionData.sessionToken && sessionData.sessionId) {
-            try {
-                const headers: Record<string, string> = {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${sessionData.sessionToken}`,
-                    'X-User-ID': sessionData.userId,
-                    'X-Session-ID': sessionData.sessionId,
-                };
-
-                const response = await fetch('/api/auth/signout', {
-                    method: 'POST',
-                    headers: headers,
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ message: "Sign out failed on server." }));
-                    showToast(errorData.message || "Could not sign out session on server.");
-                    // We still proceed to clear local session and redirect.
-                } else {
-                    console.log("Server sign out successful.");
-                }
-            } catch (error) {
-                console.error("Error calling signout API:", error);
-                showToast("Failed to communicate with server for sign out.");
-                // We still proceed to clear local session and redirect.
-            }
-        } else {
-            console.log("No local session data to terminate on server, clearing client.");
-        }
-
-        // Always clear local storage and redirect
-        clearSessionStorage();
-        router.push("/"); // Or perhaps to '/signin' if that's the desired redirect on logout
-        showToast(message);
-    };
-
-    useEffect(() => {
-        const setupSessionManagement = async () => {
-            const userId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
-            if (userId) {
-                sessionChannel.current = supabase
-                    .channel('session_updates')
-                    .on('broadcast', { event: 'session_terminated' }, async (payload) => {
-                        if (payload.userId === parseInt(userId)) {
-                            await handleSessionTermination("Your session was ended due to a new login.");
-                        }
-                    })
-                    .subscribe();
-            }
-        };
-
-        setupSessionManagement();
-
-        return () => {
-            if (sessionChannel.current) {
-                sessionChannel.current.unsubscribe();
-            }
-        };
-    }, [router]);
 
     const validateInputs = () => {
         if (!username.trim() || !password.trim()) {
@@ -130,15 +37,6 @@ export default function SignInPage() {
             return false;
         }
         return true;
-    };
-
-    // authenticateUser and updateUserSession logic moved to /api/auth/signin
-
-    const storeSessionData = (sessionToken: string, userId: string, username: string, sessionId: string) => {
-        sessionStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, sessionToken);
-        sessionStorage.setItem(STORAGE_KEYS.USER_ID, userId);
-        sessionStorage.setItem(STORAGE_KEYS.USERNAME, username);
-        sessionStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
     };
 
     const completeLoginFlow = () => {
@@ -155,7 +53,7 @@ export default function SignInPage() {
         // Set a timer to show a more specific message if login takes too long
         longLoginTimerId = setTimeout(() => {
             showToast("Finalizing previous session, this may take a bit longer. Please wait...", 'info');
-        }, 7000); // Show after 7 seconds if still loading
+        }, 7000);
 
         try {
             if (!validateInputs()) {
@@ -164,27 +62,30 @@ export default function SignInPage() {
                 return;
             }
 
+            // SECURITY FIX: Added CSRF protection and secure headers
             const response = await fetch('/api/auth/signin', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest', // CSRF protection
                 },
+                credentials: 'same-origin', // Ensure cookies are sent
                 body: JSON.stringify({ username, password }),
             });
             
-            if (longLoginTimerId) clearTimeout(longLoginTimerId); // Clear timer as fetch has completed
+            if (longLoginTimerId) clearTimeout(longLoginTimerId);
 
             const data = await response.json();
 
             if (response.ok) {
-                // sessionStorage.setItem(STORAGE_KEYS.USERNAME, data.username); // Store username if needed
+                // SECURITY FIX: No longer storing session data in client-side storage
+                // Session is managed via secure HTTP-only cookies
                 showToast(data.message || "Successfully signed in!", 'success');
                 setTimeout(() => {
                     completeLoginFlow(); 
                 }, 1000);
             } else {
                 if (response.status === 409) {
-                    // Server indicates undeploy issue (timeout or failure)
                     showToast(data.message || "Previous session cleanup encountered an issue. Please try signing in again.", 'error');
                 } else {
                     showToast(data.message || "Sign in failed. Please try again.", 'error');
@@ -226,6 +127,8 @@ export default function SignInPage() {
                             className="input-field"
                             placeholder="Enter username"
                             disabled={isLoading}
+                            autoComplete="username"
+                            maxLength={50}
                         />
                     </div>
 
@@ -240,6 +143,8 @@ export default function SignInPage() {
                             className="input-field"
                             placeholder="Enter password"
                             disabled={isLoading}
+                            autoComplete="current-password"
+                            maxLength={128}
                         />
                     </div>
 

@@ -63,12 +63,14 @@ export default function SignUpPage() {
                 return;
             }
 
-            // Call the backend API for signup
+            // Call the backend API for signup with security headers
             const response = await fetch('/api/auth/signup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest', // CSRF protection
                 },
+                credentials: 'same-origin', // Ensure cookies are sent
                 body: JSON.stringify({ username, password, token }),
             });
 

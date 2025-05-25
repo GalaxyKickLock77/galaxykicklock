@@ -5,9 +5,8 @@ import crypto from 'crypto'; // Import crypto module
 import bcrypt from 'bcrypt'; // Import bcrypt
 import { performServerSideUndeploy } from '@/lib/deploymentUtils'; // Added for server-side undeploy
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer using module-level anon client
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Added for service client
+const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Server-side only
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // SECURITY FIX: Server-side only
 
 if (!supabaseUrl) {
   console.error('Supabase URL is missing for /api/auth/signin. Check environment variables.');
@@ -24,6 +23,16 @@ const generateSessionId = (): string => {
 };
 
 export async function POST(request: NextRequest) {
+  // SECURITY FIX: Add security headers and validations
+  const origin = request.headers.get('origin');
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+  
+  // CSRF protection - check for XMLHttpRequest header
+  const isXHR = request.headers.get('X-Requested-With') === 'XMLHttpRequest';
+  if (!isXHR) {
+    return NextResponse.json({ message: 'Invalid request.' }, { status: 403 });
+  }
+
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
@@ -34,8 +43,15 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
 
-    if (!username || !password) {
+    // SECURITY FIX: Enhanced input validation
+    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
       return NextResponse.json({ message: 'Username and password are required.' }, { status: 400 });
+    }
+
+    // SECURITY FIX: Input sanitization
+    const sanitizedUsername = username.trim().toLowerCase();
+    if (sanitizedUsername.length > 50 || password.length > 128) {
+      return NextResponse.json({ message: 'Invalid input length.' }, { status: 400 });
     }
 
     // 1. Authenticate User (from authenticateUser)
@@ -54,8 +70,9 @@ export async function POST(request: NextRequest) {
     // Compare hashed password
     const passwordIsValid = await bcrypt.compare(password, user.password); // `password` is plain text from request, `user.password` is hash from DB
     if (!passwordIsValid) {
-      console.log(`Password validation failed for user: ${username}. Provided password (plain): "${password}", Stored hash from DB: "${user.password}"`); 
-      return NextResponse.json({ message: 'Invalid credentials (password mismatch).' }, { status: 401 });
+      // SECURITY FIX: Never log passwords or password hashes
+      console.log(`Password validation failed for user: ${username}.`); 
+      return NextResponse.json({ message: 'Invalid credentials.' }, { status: 401 });
     }
 
     // 2. Generate new session details
@@ -140,6 +157,7 @@ export async function POST(request: NextRequest) {
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict' as const, // SECURITY FIX: Prevent CSRF attacks
       path: '/',
       maxAge: oneDayInSeconds,
     };
