@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user, error: authError } = await supabaseService
       .from("users")
-      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout") // Change last_logout_at to last_logout
+      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout, token_removed")
       .eq("username", username)
       .single();
 
@@ -84,8 +84,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Invalid credentials.' }, { status: 401 });
     }
 
+    // Check if the user's token has been removed by an admin
+    if (user.token_removed) {
+      console.warn(`Login attempt for user ${sanitizedUsername} blocked: Token removed by admin.`);
+      return NextResponse.json({ message: 'Please renew the token to login the application.' }, { status: 403 });
+    }
+
     // --- Logout Cooldown Check ---
-    if (user.last_logout) { // Change last_logout_at to last_logout
+    if (user.last_logout) {
       const lastLogoutTime = new Date(user.last_logout).getTime(); // Change last_logout_at to last_logout
       const timeSinceLogout = currentTime - lastLogoutTime;
       if (timeSinceLogout < (COOLDOWN_SECONDS * 1000)) {

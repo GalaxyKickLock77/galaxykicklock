@@ -7,6 +7,7 @@ export interface UserSession {
   username: string; // This would be the username from the users table
   deployTimestamp?: string | null; // ISO string format for timestamp
   activeFormNumber?: number | null;
+  token?: string | null; // Add token to the session object
   tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
   lastLogout?: string | null; // Change lastLogoutAt to lastLogout
 }
@@ -54,15 +55,14 @@ export async function validateSession(request: NextRequest): Promise<UserSession
   const requestSessionId = sessionIdCookie.value;
 
   try {
-    const { data: user, error } = await supabaseService // Use service client
+    const { data: user, error: userError } = await supabaseService // Use service client
       .from('users')
-      // Temporarily remove token_expires_at from select if it's causing schema issues
-      .select('id, username, session_token, active_session_id, deploy_timestamp, active_form_number')
+      .select('id, username, session_token, active_session_id, deploy_timestamp, active_form_number, token') // Include 'token'
       .eq('id', requestUserId)
       .single();
 
-    if (error) {
-      console.error('Error fetching user from Supabase (validateSession):', error.message);
+    if (userError) {
+      console.error('Error fetching user from Supabase (validateSession):', userError.message);
       return null;
     }
 
@@ -71,7 +71,23 @@ export async function validateSession(request: NextRequest): Promise<UserSession
       return null;
     }
 
-    // Validate the token and active session ID
+    let tokenExpiresAt: string | null = null;
+    if (user.token) {
+      const { data: tokenData, error: tokenError } = await supabaseService
+        .from('tokengenerate')
+        .select('expiresat')
+        .eq('token', user.token)
+        .single();
+
+      if (tokenError) {
+        console.error('Error fetching token details from tokengenerate (validateSession):', tokenError.message);
+        // Proceed without token expiry if there's an error fetching it
+      } else if (tokenData) {
+        tokenExpiresAt = tokenData.expiresat;
+      }
+    }
+
+    // Validate the session token and active session ID
     if (user.session_token === requestToken && user.active_session_id === requestSessionId) {
       console.log('Session validated for user (validateSession):', user.username);
       return { 
@@ -79,7 +95,8 @@ export async function validateSession(request: NextRequest): Promise<UserSession
         username: user.username,
         deployTimestamp: user.deploy_timestamp,
         activeFormNumber: user.active_form_number,
-        // tokenExpiresAt: user.token_expires_at // Temporarily remove
+        token: user.token, // Include the token value
+        tokenExpiresAt: tokenExpiresAt, // Include the fetched expiry
       };
     } else {
       console.log('Session validation failed (validateSession): Token or Session ID mismatch.');

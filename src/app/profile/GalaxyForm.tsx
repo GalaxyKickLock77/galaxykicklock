@@ -48,6 +48,7 @@ const GalaxyForm: React.FC = () => {
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
   const [showAdminBlockPopup, setShowAdminBlockPopup] = useState<boolean>(false); // New state for admin block popup
+  const [showTokenExpiredPopup, setShowTokenExpiredPopup] = useState<boolean>(false); // New state for token expired popup
   const [tokenExpiryDisplay, setTokenExpiryDisplay] = useState<string | null>(null);
   const [currentUserIdState, setCurrentUserIdState] = useState<string | null>(null);
 
@@ -144,7 +145,7 @@ const GalaxyForm: React.FC = () => {
 
   const handleUndeploy = useCallback(async () => {
     clearAllPollingTimers();
-    if (!username) { alert('Username not found.'); return; }
+    if (!username) { return; }
     if (activationProgressTimerId !== null) {
       window.clearInterval(activationProgressTimerId);
       setActivationProgressTimerId(null);
@@ -329,7 +330,12 @@ const GalaxyForm: React.FC = () => {
             const month = String(expiryDate.getMonth() + 1).padStart(2, '0');
             const year = expiryDate.getFullYear(); const formattedDate = `${day}-${month}-${year}`;
             let daysRemainingString = "";
-            if (expiryDateMidnight < todayMidnight) daysRemainingString = "(Expired)";
+            if (expiryDateMidnight < todayMidnight) {
+              daysRemainingString = "(Expired)";
+              setShowTokenExpiredPopup(true); // Show popup if token is expired on session fetch
+              setIsDeployed(false); // Disable deploy if token is expired
+              setRedeployMode(true); // Force redeploy mode
+            }
             else {
               const diffTime = Math.abs(expiryDateMidnight.getTime() - todayMidnight.getTime());
               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -348,7 +354,7 @@ const GalaxyForm: React.FC = () => {
       setIsDeployed(false); setShowDeployPopup(true);
       sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
     }
-  }, [checkInitialDeploymentStatus, router, setCurrentUserIdState, setDisplayedUsername, setUsername, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setTokenExpiryDisplay]);
+  }, [checkInitialDeploymentStatus, router, setCurrentUserIdState, setDisplayedUsername, setUsername, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setTokenExpiryDisplay, setShowTokenExpiredPopup, setRedeployMode]);
 
   useEffect(() => { setIsClient(true); }, []);
 
@@ -377,6 +383,27 @@ const GalaxyForm: React.FC = () => {
                 console.log('[GalaxyForm] User ID mismatch or missing payload data. Not dispatching event.');
             }
         })
+        .on('broadcast', { event: 'token_expired' }, async (message) => { // Make the callback async
+            console.log('[GalaxyForm] Received token_expired broadcast:', message);
+            const storedUserId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
+            if (message.payload && message.payload.userId && storedUserId && message.payload.userId.toString() === storedUserId) {
+                console.log('[GalaxyForm] Token expired for current user. Showing token expired popup.');
+                setShowTokenExpiredPopup(true);
+                setIsDeployed(false); // Treat as not deployed if token is expired
+                setRedeployMode(true); // Force redeploy mode
+                setShowDeployPopup(true); // Show the main deploy popup, which will then be overridden by token expired popup
+                setDeploymentStatus('Your token has expired. Please renew it by reaching out to the Owner on Discord GalaxyKickLock.');
+
+                // Perform undeploy and logout actions
+                try {
+                    await handleUndeploy();
+                } catch (undeployError) {
+                    console.error('Error during undeploy triggered by token_expired:', undeployError);
+                }
+                // After undeploy, proceed to logout and redirect
+                await handleLogout();
+            }
+        })
         .subscribe(status => {
             console.log('[GalaxyForm] Supabase channel status:', status);
         });
@@ -390,7 +417,7 @@ const GalaxyForm: React.FC = () => {
         if (activationProgressTimerId !== null) window.clearInterval(activationProgressTimerId);
         window.removeEventListener('beforeunload', beforeUnloadHandler);
     };
-  }, [isClient, fetchSessionDetails, activationProgressTimerId]);
+  }, [isClient, fetchSessionDetails, activationProgressTimerId, setShowTokenExpiredPopup, setIsDeployed, setRedeployMode, setShowDeployPopup, setDeploymentStatus]);
   
   const pollRunStatus = useCallback((runIdToPoll: number) => {
     setDeploymentStatus(`Monitoring run ID: ${runIdToPoll}. Waiting for status updates...`);
@@ -502,7 +529,12 @@ const GalaxyForm: React.FC = () => {
 
   const handleDeploy = useCallback(async () => {
     clearAllPollingTimers(); 
-    if (!username) { alert('Username not found.'); return; }
+    if (!username) { return; }
+    if (showTokenExpiredPopup) { // Prevent deployment if token is expired
+      setDeploymentStatus('Cannot deploy: Your token has expired. Please renew it.');
+      setShowDeployPopup(true); // Ensure popup is visible
+      return;
+    }
     if (activationProgressTimerId !== null) { window.clearInterval(activationProgressTimerId); setActivationProgressTimerId(null); }
     setActivationProgressPercent(0); setIsDeploying(true); setRedeployMode(false); setShowDeployPopup(true);
     setDeploymentStatus('Dispatching workflow...'); const authHeaders = getApiAuthHeaders();
@@ -527,7 +559,7 @@ const GalaxyForm: React.FC = () => {
       setIsPollingStatus(false); // Ensure polling status is false on dispatch error
       setRedeployMode(true);
     }
-  }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, /*setters:*/ setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed]);
+  }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, showTokenExpiredPopup, /*setters:*/ setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed]);
   
   const saveAllFormDataToLocalStorage = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -575,11 +607,14 @@ const GalaxyForm: React.FC = () => {
       const modifiedFormData = Object.entries(formData).reduce((acc, [key, value]) => { acc[`${key}${formNumber}`] = value; return acc; }, {} as Record<string, string>);
       const response = await fetch(`/api/localt/action`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ action: action, formNumber: formNumber, formData: modifiedFormData, logicalUsername: username }) });
       if (response.ok) {
-        setButtonStates(prev => ({ ...prev, [action]: { loading: false, active: true, text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated', },
-          ...(action === 'start' ? { stop: { ...prev.stop, active: false, text: 'Stop' }, } : {}),
-          ...(action === 'stop' ? { start: { ...prev.start, active: false, text: 'Start' }, } : {}),
+        setButtonStates(prev => ({ 
+          ...prev, 
+          [action]: { loading: false, active: true, text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated' },
+          ...(action === 'start' ? { stop: { ...prev.stop, active: false, text: 'Stop' } } : {}),
+          ...(action === 'stop' ? { start: { ...prev.start, active: false, text: 'Start' } } : {}),
           ...(action === 'update' ? { update: { loading: false, active: true, text: 'Updated' } } : {})
-        })); setError([]);
+        })); 
+        setError([]);
         setToastMessage(null); // Clear toast message on successful action
       } else if (response.status === 409) {
         const errorData = await response.json();
@@ -623,9 +658,9 @@ const GalaxyForm: React.FC = () => {
             </div>
           ))}
           <div className={styles.buttonGroup} style={{ gap: '20px', display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
-            <button type="button" onClick={() => handleAction(formNumber)('start')} className={`${styles.button} ${currentButtonStates.start.loading ? styles.loadingButton : ''} ${currentButtonStates.start.active ? styles.buttonRunning : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.start.loading} style={{ backgroundColor: currentButtonStates.start.active ? '#22c55e' : undefined }} > <Play size={16} /> <span>Start</span> </button>
-            <button type="button" onClick={() => handleAction(formNumber)('stop')} className={`${styles.button} ${currentButtonStates.stop.loading ? styles.loadingButton : ''} ${currentButtonStates.stop.active ? styles.buttonStopped : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.stop.loading} > <Square size={16} /> <span>Stop</span> </button>
-            <button type="button" onClick={() => handleAction(formNumber)('update')} className={`${styles.button} ${currentButtonStates.update.loading ? styles.loadingButton : ''} ${currentButtonStates.update.active ? styles.buttonUpdated : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.update.loading} style={{ backgroundColor: currentButtonStates.update.active ? '#3b82f6' : undefined }} > <RefreshCw size={16} /> <span>Update</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('start')} className={`${styles.button} ${currentButtonStates.start.loading ? styles.loadingButton : ''} ${currentButtonStates.start.active ? styles.buttonRunning : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.start.loading || showTokenExpiredPopup} style={{ backgroundColor: currentButtonStates.start.active ? '#22c55e' : undefined }} > <Play size={16} /> <span>Start</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('stop')} className={`${styles.button} ${currentButtonStates.stop.loading ? styles.loadingButton : ''} ${currentButtonStates.stop.active ? styles.buttonStopped : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.stop.loading || showTokenExpiredPopup} > <Square size={16} /> <span>Stop</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('update')} className={`${styles.button} ${currentButtonStates.update.loading ? styles.loadingButton : ''} ${currentButtonStates.update.active ? styles.buttonUpdated : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.update.loading || showTokenExpiredPopup} style={{ backgroundColor: currentButtonStates.update.active ? '#3b82f6' : undefined }} > <RefreshCw size={16} /> <span>Update</span> </button>
             {renderStatusButton()}
           </div>
         </div>
@@ -635,9 +670,9 @@ const GalaxyForm: React.FC = () => {
 
   const renderStatusButton = () => {
     if (isDeployed) {
-      return ( <button onClick={handleUndeploy} disabled={isUndeploying} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#22c55e', border: 'none' }} > {isUndeploying ? ( <> <RefreshCw size={16} /> <span>Undeploying...</span> </> ) : ( <> <CheckCircle size={16} /> <span>Deployed</span> </> )} </button> );
+      return ( <button onClick={handleUndeploy} disabled={isUndeploying || showTokenExpiredPopup} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#22c55e', border: 'none' }} > {isUndeploying ? ( <> <RefreshCw size={16} /> <span>Undeploying...</span> </> ) : ( <> <CheckCircle size={16} /> <span>Deployed</span> </> )} </button> );
     } else {
-      return ( <button onClick={() => setShowDeployPopup(true)} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#dc2626', border: 'none' }} > <RefreshCw size={16} /> <span>Deploy</span> </button> );
+      return ( <button onClick={() => setShowDeployPopup(true)} disabled={showTokenExpiredPopup} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#dc2626', border: 'none' }} > <RefreshCw size={16} /> <span>Deploy</span> </button> );
     }
   };
 
@@ -679,18 +714,18 @@ const GalaxyForm: React.FC = () => {
             {isDeployed && isPollingStatus && activationProgressTimerId !== null && (
               <div style={{ marginBottom: '20px', width: '100%', backgroundColor: '#333', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{ width: `${activationProgressPercent}%`, height: '10px', backgroundColor: '#22c55e', transition: 'width 0.5s ease-in-out' }} />
-F              </div>
+              </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: (isDeployed && isPollingStatus && activationProgressTimerId !== null) ? '0' : '20px' }}>
               {/* Show Redeploy Again button if in redeploy mode and not currently deploying/activating */}
               {redeployMode && !isDeploying && !isPollingStatus ? (
-                <button onClick={handleDeploy} disabled={isDeploying || isPollingStatus} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || isPollingStatus) ? '#555' : '#e67e22', color: 'white', fontWeight: 'bold', cursor: (isDeploying || isPollingStatus) ? 'not-allowed' : 'pointer', opacity: (isDeploying || isPollingStatus) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} >
+                <button onClick={handleDeploy} disabled={isDeploying || isPollingStatus || showTokenExpiredPopup} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? '#555' : '#e67e22', color: 'white', fontWeight: 'bold', cursor: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? 'not-allowed' : 'pointer', opacity: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} >
                   Redeploy Again
                 </button>
               ) : (isDeployed && !redeployMode && !isPollingStatus && activationProgressTimerId === null) ? ( <p style={{color: '#22c55e'}}>Deployment is active!</p> ) : null}
             </div>
             {/* Show close button if not deploying or activating */}
-            {(!isDeploying && activationProgressTimerId === null) && (
+            {(!isDeploying && activationProgressTimerId === null && !showTokenExpiredPopup) && (
               <button onClick={() => setShowDeployPopup(false)} style={{marginTop: '15px', background: 'none', border: '1px solid #555', color: '#aaa', padding: '5px 10px', borderRadius: '4px'}}> Close </button>
             )}
           </div>
@@ -719,6 +754,17 @@ F              </div>
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {showTokenExpiredPopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1060 }}>
+          <div style={{ backgroundColor: '#2a2a2a', color: '#fff', borderRadius: '8px', padding: '30px', width: '400px', boxShadow: '0 5px 25px rgba(0, 0, 0, 0.6)', border: '1px solid #f39c12', textAlign: 'center' }}>
+            <h2 style={{ color: '#f39c12', marginBottom: '15px', fontSize: '1.5rem' }}>Token Expired</h2>
+            <p style={{ color: '#ccc', marginBottom: '25px', fontSize: '1rem', lineHeight: '1.6' }}>
+              Your token has expired. Please renew it by reaching out to the Owner on Discord GalaxyKickLock.
+            </p>
+            {/* No close button as per requirement */}
           </div>
         </div>
       )}

@@ -374,11 +374,10 @@ export default function AdminDashboardPage() {
                 // Update the active tokens
                 updateActiveTokens(updatedHistory);
 
-                showToast('Token deleted successfully!');
                 fetchTokenUserDetails(); // Refresh the token user details
             } catch (error) {
                 console.error('Error deleting token:', error);
-                showToast('Error deleting token');
+                showToast('Error deleting token'); // Keep this for actual errors
             }
         } else if (action === 'user') {
             // Delete the user and their InUse token
@@ -687,7 +686,7 @@ export default function AdminDashboardPage() {
                                                             status === 'InUse'
                                                                 ? 'bg-red-500'
                                                                 : status === 'Expired'
-                                                                ? 'bg-green-500'
+                                                                ? 'bg-gray-500' // Changed to gray for expired
                                                                 : 'bg-yellow-500'
                                                         }`}
                                                     >
@@ -704,7 +703,8 @@ export default function AdminDashboardPage() {
                                                                 showToast('Error: User ID or Token is missing.');
                                                             }
                                                         }}
-                                                        className="text-white hover:text-red-700 px-2 py-1 rounded" style={{ color: 'white' }}
+                                                        disabled={status === 'Expired'} // Disable if expired
+                                                        className={`text-white px-2 py-1 rounded ${status === 'Expired' ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-700'}`} style={{ color: 'white' }}
                                                     >
                                                         Delete
                                                     </button>
@@ -717,7 +717,8 @@ export default function AdminDashboardPage() {
                                                                 showToast('Error: User ID is missing.');
                                                             }
                                                         }}
-                                                        className="px-2 py-1 rounded ml-2 text-white" style={{ color: 'white' }}
+                                                        disabled={status === 'Expired'} // Disable if expired
+                                                        className={`px-2 py-1 rounded ml-2 text-white ${status === 'Expired' ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ color: 'white' }}
                                                    >
                                                        Renew Token
                                                     </button>
