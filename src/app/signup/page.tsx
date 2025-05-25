@@ -3,8 +3,7 @@
 import React, { useState } from "react"; // useEffect removed as sessionStorage logic is no longer needed
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 import { X, DollarSign, FileText, Info, MessageCircle } from 'lucide-react'; // Added MessageCircle for Discord representation
 
 export default function SignUpPage() {
@@ -105,7 +104,6 @@ export default function SignUpPage() {
 
     return (
         <div className="welcome-container">
-            <ToastContainer />
             <div className="auth-card max-w-md w-full p-8">
                 <h1 className="text-center mb-8">
                     <span style={{ 

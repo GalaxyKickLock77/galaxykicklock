@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 
 // SECURITY FIX: Removed client-side Supabase initialization
 // All authentication is now handled server-side via secure HTTP-only cookies
@@ -15,10 +14,10 @@ export default function SignInPage() {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
-    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error') => {
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error', autoClose: number = 3000) => {
         toast[type](message, {
             position: "top-right",
-            autoClose: type === 'info' ? 7000 : 3000,
+            autoClose: autoClose,
             hideProgressBar: false,
             closeOnClick: true,
             pauseOnHover: true,
@@ -26,6 +25,15 @@ export default function SignInPage() {
             theme: "dark"
         });
     };
+
+    // Effect to check for the 'newSessionOpenedElsewhere' flag on mount
+    useEffect(() => {
+        const newSessionFlag = localStorage.getItem('newSessionOpenedElsewhere');
+        if (newSessionFlag) {
+            showToast("A new session was opened elsewhere. You have been logged out from this session.", 'info', 5000);
+            localStorage.removeItem('newSessionOpenedElsewhere'); // Clear the flag
+        }
+    }, []); // Run only once on component mount
 
     const validateInputs = () => {
         if (!username.trim() || !password.trim()) {
@@ -102,7 +110,6 @@ export default function SignInPage() {
 
     return (
         <div className="welcome-container">
-            <ToastContainer />
             <div className="auth-card max-w-md w-full p-8">
                 <h1 className="text-center mb-8">
                     <span style={{ 
