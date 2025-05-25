@@ -6,6 +6,10 @@ import "./globals.css";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "react-toastify";
+import { createClient } from '@supabase/supabase-js'; // Import Supabase client
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -51,20 +55,44 @@ export default function RootLayout({
     }
   }, []);
 
-  const handleStaleSession = useCallback(async (isAdminBlocked: boolean = false) => {
-    if (isAdminBlocked) {
-      setShowAdminBlockPopup(true);
-      console.log('[Layout] Admin blocked: Server-side undeploy should have been triggered by admin API. Redirecting...');
-      toast.dismiss();
-      setTimeout(() => {
-        setShowAdminBlockPopup(false);
-        router.push("/signin");
-      }, 5000);
-    } else {
-      toast.dismiss();
-      router.push("/signin");
+  const handleStaleSession = useCallback(async (reason: 'admin_removed_token' | 'token_expired' | 'session_terminated') => {
+    let message = '';
+    let redirectDelay = 5000; // Default delay
+
+    switch (reason) {
+      case 'admin_removed_token':
+        message = "Admin has blocked or removed your token. Please renew the token to login the application.";
+        setShowAdminBlockPopup(true); // Use this for admin block message
+        break;
+      case 'token_expired':
+        message = "Your token has expired. Please renew the token to login the application.";
+        setShowAdminBlockPopup(true); // Use this for token expired message
+        break;
+      case 'session_terminated':
+      default:
+        message = "Your session has been terminated. You will be redirected to the sign-in page shortly.";
+        setShowAdminBlockPopup(false); // Don't show specific popup for generic termination
+        redirectDelay = 1000; // Faster redirect for generic termination
+        break;
     }
-  }, [router]); // Removed isDeployed from dependencies as it's no longer directly used for client-side undeploy trigger
+
+    toast.dismiss(); // Dismiss any existing toasts
+    toast.info(message, {
+      position: "top-right",
+      autoClose: redirectDelay - 500, // Close toast slightly before redirect
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      theme: "dark"
+    });
+
+    console.log(`[Layout] Session stale reason: ${reason}. Redirecting...`);
+    setTimeout(() => {
+      setShowAdminBlockPopup(false); // Hide popup after delay
+      router.push("/signin");
+    }, redirectDelay);
+  }, [router]);
 
 
   const pathname = usePathname();
@@ -75,16 +103,33 @@ export default function RootLayout({
       fetchDeploymentStatus();
     }
 
-    const handleGlobalSessionTerminated = (event: Event) => {
-      const customEvent = event as CustomEvent<{ isAdminBlocked: boolean }>;
-      handleStaleSession(customEvent.detail.isAdminBlocked);
-    };
+    // Initialize Supabase client for client-side real-time updates
+    if (supabaseUrl && supabaseAnonKey) {
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const channel = supabase.channel('session_updates');
 
-    window.addEventListener('globalSessionTerminated', handleGlobalSessionTerminated);
+      channel.on(
+        'broadcast',
+        { event: 'token_expired' },
+        (payload) => {
+          console.log('[Layout] Received token_expired broadcast:', payload);
+          handleStaleSession(payload.payload.reason); // Pass the reason from the payload
+        }
+      ).on(
+        'broadcast',
+        { event: 'session_terminated' },
+        (payload) => {
+          console.log('[Layout] Received session_terminated broadcast:', payload);
+          handleStaleSession('session_terminated'); // Generic session termination
+        }
+      ).subscribe();
 
-    return () => {
-      window.removeEventListener('globalSessionTerminated', handleGlobalSessionTerminated);
-    };
+      return () => {
+        channel.unsubscribe();
+      };
+    } else {
+      console.error('Supabase client not initialized in RootLayout due to missing env vars (NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY).');
+    }
   }, [fetchDeploymentStatus, handleStaleSession, pathname]);
 
   return (
@@ -93,16 +138,16 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        {/* The popup is now controlled by the toast messages, but keeping this for specific admin/token messages if needed */}
         {showAdminBlockPopup && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
             <div className="bg-red-600 text-white p-8 rounded-lg shadow-xl text-center">
-              <h2 className="text-2xl font-bold mb-4">Session Terminated</h2>
+              <h2 className="text-2xl font-bold mb-4">Session Expired / Blocked</h2>
               <p className="text-lg">
-                Admin has Blocked or removed you. You will be redirected to the
-                sign-in page shortly.
+                Your session has ended. You will be redirected to the sign-in page.
               </p>
               <p className="text-sm mt-2">
-                Stopping and undeploying services...
+                Please renew your token to log in.
               </p>
             </div>
           </div>

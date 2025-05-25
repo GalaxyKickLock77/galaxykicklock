@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { performServerSideUndeploy } from '@/lib/deploymentUtils'; // Import performServerSideUndeploy
 
 // Define a type for your session data
 export interface UserSession {
@@ -7,9 +8,11 @@ export interface UserSession {
   username: string; // This would be the username from the users table
   deployTimestamp?: string | null; // ISO string format for timestamp
   activeFormNumber?: number | null;
+  activeRunId?: number | string | null; // Add activeRunId
   token?: string | null; // Add token to the session object
   tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
   lastLogout?: string | null; // Change lastLogoutAt to lastLogout
+  tokenRemoved?: boolean | null; // Add tokenRemoved to the session object
 }
 
 const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Server-side only
@@ -39,7 +42,7 @@ export async function validateSession(request: NextRequest): Promise<UserSession
   }
 
   // Create a Supabase client with the service role key for this function
-  const supabaseService = createClient(supabaseUrl, supabaseServiceRoleKey);
+  const supabaseService: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const sessionTokenCookie = request.cookies.get('sessionToken');
   const userIdCookie = request.cookies.get('userId');
@@ -57,7 +60,7 @@ export async function validateSession(request: NextRequest): Promise<UserSession
   try {
     const { data: user, error: userError } = await supabaseService // Use service client
       .from('users')
-      .select('id, username, session_token, active_session_id, deploy_timestamp, active_form_number, token') // Include 'token'
+      .select('id, username, session_token, active_session_id, deploy_timestamp, active_form_number, active_run_id, token, token_removed') // Include 'token' and 'token_removed'
       .eq('id', requestUserId)
       .single();
 
@@ -72,6 +75,8 @@ export async function validateSession(request: NextRequest): Promise<UserSession
     }
 
     let tokenExpiresAt: string | null = null;
+    let isTokenExpired = false;
+
     if (user.token) {
       const { data: tokenData, error: tokenError } = await supabaseService
         .from('tokengenerate')
@@ -84,7 +89,76 @@ export async function validateSession(request: NextRequest): Promise<UserSession
         // Proceed without token expiry if there's an error fetching it
       } else if (tokenData) {
         tokenExpiresAt = tokenData.expiresat;
+        // Only create a Date object if tokenExpiresAt is not null
+        if (tokenExpiresAt) {
+          const expiryDate = new Date(tokenExpiresAt);
+          if (expiryDate < new Date()) {
+            isTokenExpired = true;
+            console.log(`[validateSession] User ${user.username}'s token has expired.`);
+          }
+        }
       }
+    }
+
+    // If token is expired or marked as removed by admin, invalidate session and update user status
+    if (isTokenExpired || user.token_removed) {
+      console.log(`[validateSession] Invalidating session for user ${user.username} due to ${isTokenExpired ? 'expired token' : 'admin token removal'}.`);
+
+      // Perform server-side undeploy if there's an active deployment
+      const hasActiveGitHubRun = user.deploy_timestamp && user.active_run_id;
+      const hasActiveLocaltForm = user.deploy_timestamp && user.active_form_number && user.active_form_number > 0;
+
+      if (hasActiveGitHubRun || hasActiveLocaltForm) {
+        console.log(`[validateSession] User ${user.username} has an active deployment. Attempting server-side undeploy.`);
+        const undeployResult = await performServerSideUndeploy(
+          user.id.toString(),
+          user.username,
+          user.deploy_timestamp,
+          user.active_form_number,
+          user.active_run_id,
+          supabaseService
+        );
+        if (!undeployResult.success) {
+          console.error(`[validateSession] Server-side undeploy failed for user ${user.username} during token expiry/removal. Reason: ${undeployResult.message}`);
+        } else {
+          console.log(`[validateSession] Server-side undeploy process completed for user ${user.username}. Result: ${undeployResult.message}`);
+        }
+      }
+
+      // Update user record to reflect token removal/expiry
+      const { error: updateError } = await supabaseService
+        .from('users')
+        .update({
+          token: null,
+          token_removed: true, // Ensure this is true if expired or removed
+          session_token: null, // Invalidate current session token
+          active_session_id: null, // Invalidate current session ID
+          deploy_timestamp: null, // Clear deployment status
+          active_form_number: null,
+          active_run_id: null,
+          last_logout: new Date().toISOString(), // Mark as logged out
+        })
+        .eq('id', requestUserId);
+
+      if (updateError) {
+        console.error('Error updating user status after token expiry/removal:', updateError.message);
+      }
+
+      // Broadcast session termination event
+      try {
+        await supabaseService
+          .channel('session_updates')
+          .send({
+            type: 'broadcast',
+            event: 'token_expired', // Use existing event for client-side handling
+            payload: { userId: user.id, reason: isTokenExpired ? 'token_expired' : 'admin_removed_token' }
+          });
+        console.log(`[validateSession] Broadcasted token_expired for user ${user.id} due to ${isTokenExpired ? 'expiry' : 'admin removal'}.`);
+      } catch (broadcastEx: any) {
+        console.error(`[validateSession] Exception during token_expired broadcast for user ${user.id}:`, broadcastEx.message);
+      }
+
+      return null; // Invalidate session
     }
 
     // Validate the session token and active session ID
@@ -95,8 +169,10 @@ export async function validateSession(request: NextRequest): Promise<UserSession
         username: user.username,
         deployTimestamp: user.deploy_timestamp,
         activeFormNumber: user.active_form_number,
+        activeRunId: user.active_run_id, // Include activeRunId
         token: user.token, // Include the token value
         tokenExpiresAt: tokenExpiresAt, // Include the fetched expiry
+        tokenRemoved: user.token_removed, // Include tokenRemoved status
       };
     } else {
       console.log('Session validation failed (validateSession): Token or Session ID mismatch.');
