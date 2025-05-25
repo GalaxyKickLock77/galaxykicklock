@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user, error: authError } = await supabaseService
       .from("users")
-      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout_at") // Include last_logout_at
+      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout") // Change last_logout_at to last_logout
       .eq("username", username)
       .single();
 
@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Logout Cooldown Check ---
-    if (user.last_logout_at) {
-      const lastLogoutTime = new Date(user.last_logout_at).getTime();
+    if (user.last_logout) { // Change last_logout_at to last_logout
+      const lastLogoutTime = new Date(user.last_logout).getTime(); // Change last_logout_at to last_logout
       const timeSinceLogout = currentTime - lastLogoutTime;
       if (timeSinceLogout < (COOLDOWN_SECONDS * 1000)) {
         const timeLeft = (COOLDOWN_SECONDS * 1000) - timeSinceLogout;
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
         active_session_id: newSessionId,
         login_count: (user.login_count || 0) + 1,
         last_login: new Date().toISOString(),
-        last_logout_at: null, // Clear last_logout_at on successful login
+        last_logout: null, // Clear last_logout on successful login
       })
       .eq("id", user.id);
 

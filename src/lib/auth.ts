@@ -8,7 +8,7 @@ export interface UserSession {
   deployTimestamp?: string | null; // ISO string format for timestamp
   activeFormNumber?: number | null;
   tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
-  lastLogoutAt?: string | null; // Add last_logout_at to session object type
+  lastLogout?: string | null; // Change lastLogoutAt to lastLogout
 }
 
 const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Server-side only
@@ -113,7 +113,7 @@ export async function updateUserLogoutTimestamp(
   try {
     const { error } = await supabaseService
       .from('users')
-      .update({ last_logout_at: timestamp })
+      .update({ last_logout: timestamp }) // Change last_logout_at to last_logout
       .eq('id', userId);
 
     if (error) {

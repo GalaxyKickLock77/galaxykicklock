@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const logoutTimestampUpdated = await updateUserLogoutTimestamp(session.userId, logoutTimestamp);
 
     if (!logoutTimestampUpdated) {
-      console.error('Failed to update last_logout_at timestamp during signout.');
+      console.error('Failed to update last_logout timestamp during signout.'); // Changed last_logout_at to last_logout
       // Decide if this should block signout or just be a warning.
       // For now, let's proceed with signout but log the error.
     }

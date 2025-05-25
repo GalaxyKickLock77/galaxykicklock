@@ -237,7 +237,7 @@ const GalaxyForm: React.FC = () => {
           setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true); return;
         } else { throw new Error(`Failed to fetch latest run for undeploy: ${latestRunResponse.status} ${await latestRunResponse.text()}`); }
       } catch (error: any) {
-        setDeploymentStatus(`Error during undeploy: ${error.message}. You may need to redeploy.`);
+        setDeploymentStatus(`An error occurred during undeployment. Please try again.`); // Generic error message
         setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true);
       }
     }, [username, clearAllPollingTimers, activationProgressTimerId, pollForCancelledStatus, setActivationProgressTimerId, setActivationProgressPercent, setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5, setError1, setError2, setError3, setError4, setError5, setIsUndeploying, setIsPollingStatus, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setRedeployMode, formData1, formData2, formData3, formData4, formData5, buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5 ]);
@@ -249,15 +249,15 @@ const GalaxyForm: React.FC = () => {
       }
       if (isDeployed) {
         setShowDeployPopup(true);
-        try { await handleUndeploy(); } catch (err) { console.error("Error during undeploy on logout:", err); }
+        try { await handleUndeploy(); } catch (err) { console.error("Error during undeploy on logout."); } // Generic error
       }
       try {
         const response = await fetch('/api/auth/signout', { method: 'POST', headers: getApiAuthHeaders() });
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          console.error('Logout API call failed:', errorData.message || response.statusText);
+          console.error('Logout API call failed.'); // Generic error
         }
-      } catch (apiError) { console.error('Error calling logout API:', apiError); }
+      } catch (apiError) { console.error('Error calling logout API.'); } // Generic error
       sessionStorage.removeItem(STORAGE_KEYS.USERNAME);
       sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
       router.push('/signin');
@@ -283,7 +283,7 @@ const GalaxyForm: React.FC = () => {
           setDeploymentStatus('No deployment found for your user. Deployment is required.');
         } else {
           const errorData = await response.json();
-          setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
+          setDeploymentStatus(`Error checking status. Please try again.`); // Generic error
           setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true); setIsPollingStatus(false);
         }
       } catch (error) {
@@ -298,9 +298,9 @@ const GalaxyForm: React.FC = () => {
         const signoutResponse = await fetch('/api/auth/signout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
         if (!signoutResponse.ok) {
           const errorData = await signoutResponse.json().catch(() => ({}));
-          console.warn(`[StaleSession] Call to /api/auth/signout responded with ${signoutResponse.status}: ${errorData.message || signoutResponse.statusText}.`);
+          console.warn(`[StaleSession] Failed to sign out cleanly.`); // Generic warning
         } else { console.log('[StaleSession] /api/auth/signout call reported success.'); }
-    } catch (error) { console.error('[StaleSession] Error calling /api/auth/signout:', error); }
+    } catch (error) { console.error('[StaleSession] Error during signout process.'); } // Generic error
     sessionStorage.removeItem(STORAGE_KEYS.USERNAME); 
     sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
     setUsername(null); setDisplayedUsername(null); setIsDeployed(false); setCurrentUserIdState(null); 
@@ -381,7 +381,7 @@ const GalaxyForm: React.FC = () => {
                 handleStaleSession();
             }
         })
-        .subscribe(status => { if (status !== 'SUBSCRIBED') console.error(`Failed to subscribe to session_updates: ${status}`); });
+        .subscribe(status => { /* Suppress console error for subscription status */ });
     const beforeUnloadHandler = () => { 
       const storedUser = sessionStorage.getItem(STORAGE_KEYS.USERNAME);
       if (storedUser && navigator.sendBeacon) navigator.sendBeacon('/api/auth/beacon-signout-undeploy', new Blob([JSON.stringify({})], {type : 'application/json'})); 
@@ -494,7 +494,7 @@ const GalaxyForm: React.FC = () => {
         else {
           if (findRunIdTimerRef.current !== null) window.clearInterval(findRunIdTimerRef.current);
           findRunIdTimerRef.current = null;
-          setDeploymentStatus(`Error finding workflow run: ${error instanceof Error ? error.message : String(error)}`);
+          setDeploymentStatus(`An error occurred while locating the workflow run.`); // Generic error message
           setIsPollingStatus(false); setRedeployMode(true);
         }
       }
@@ -524,7 +524,7 @@ const GalaxyForm: React.FC = () => {
       }
     } catch (error) {
       setIsDeploying(false);
-      setDeploymentStatus(`Dispatch error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setDeploymentStatus(`An error occurred during deployment dispatch.`); // Generic error message
       setIsDeployed(false);
       setIsPollingStatus(false); // Ensure polling status is false on dispatch error
       setRedeployMode(true);

@@ -5,7 +5,6 @@ import { validateAdminSession } from '@/lib/adminAuth';
 
 // Define paths that are public (don't require authentication)
 const PUBLIC_PATHS = [
-  '/',                // Root page
   '/signin',          // Regular user sign-in page
   '/signup',          // Regular user sign-up page
   '/admin',           // Admin sign-in page (src/app/admin/page.tsx)
