@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     if (attempts.length >= MAX_ATTEMPTS_PER_MINUTE) {
       const timeSinceLastAttempt = currentTime - attempts[attempts.length - 1];
-      const timeLeftToWait = BLOCK_DURATION_MS - timeSinceLastAttempt;
+      const timeLeftToWait = Math.max(0, BLOCK_DURATION_MS - timeSinceLastAttempt); // Ensure timeLeftToWait is not negative
       if (timeLeftToWait > 0) {
         console.warn(`Rate limit exceeded for user ${sanitizedUsername}. Blocking for ${timeLeftToWait / 1000}s.`);
         return NextResponse.json({ message: `Too many login attempts. Please try again in ${Math.ceil(timeLeftToWait / 1000)} seconds.` }, { status: 429 });
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       const lastLogoutTime = new Date(user.last_logout).getTime(); // Change last_logout_at to last_logout
       const timeSinceLogout = currentTime - lastLogoutTime;
       if (timeSinceLogout < (COOLDOWN_SECONDS * 1000)) {
-        const timeLeft = (COOLDOWN_SECONDS * 1000) - timeSinceLogout;
+        const timeLeft = Math.max(0, (COOLDOWN_SECONDS * 1000) - timeSinceLogout); // Ensure timeLeft is not negative
         console.warn(`User ${sanitizedUsername} attempting to login too soon after logout. Blocking for ${timeLeft / 1000}s.`);
         return NextResponse.json({ message: `Please wait ${Math.ceil(timeLeft / 1000)} seconds before logging in again.` }, { status: 429 });
       }
