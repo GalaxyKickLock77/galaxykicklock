@@ -23,11 +23,17 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password, token: signupToken } = await request.json();
 
-    if (!username || !password || !signupToken) {
-      return NextResponse.json({ message: 'Username, password, and token are required.' }, { status: 400 });
+    if (!username) {
+      return NextResponse.json({ message: 'Username is required.' }, { status: 400 });
+    }
+    if (!password) {
+      return NextResponse.json({ message: 'Password is required.' }, { status: 400 });
     }
     if (password.length < 8) {
         return NextResponse.json({ message: 'Password must be at least 8 characters long.' }, { status: 400 });
+    }
+    if (!signupToken) {
+      return NextResponse.json({ message: 'Token is required.' }, { status: 400 });
     }
 
     // 1. Verify Token (from client-side verifyToken)
