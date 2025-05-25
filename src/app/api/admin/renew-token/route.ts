@@ -98,10 +98,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Failed to insert new token during renewal.' }, { status: 500 });
     }
 
-    // 3. Update the users table with the new token
+    // 3. Update the users table with the new token and set token_removed to FALSE
     const { error: userUpdateError } = await supabase
       .from('users')
-      .update({ token: newTokenString }) // Assuming 'token' column in 'users' table stores the active token
+      .update({ token: newTokenString, token_removed: false }) // Set token_removed to false on renewal
       .eq('id', userId);
 
     if (userUpdateError) {
