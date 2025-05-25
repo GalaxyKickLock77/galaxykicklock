@@ -13,7 +13,7 @@ export default function SignUpPage() {
     const [token, setToken] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showTokenInfoPopup, setShowTokenInfoPopup] = useState(false);
-    const [currentInfoStep, setCurrentInfoStep] = useState(0); // 0: hidden, 1: Discord, 2: Pricing, 3: Terms
+    const [currentInfoStep, setCurrentInfoStep] = useState(3); // Always start at step 3 (Terms)
     const router = useRouter();
 
     const showToast = (message: string, type: 'success' | 'error' = 'error') => {
@@ -152,14 +152,13 @@ export default function SignUpPage() {
                             <Info
                                 size={16}
                                 style={{ cursor: 'pointer', color: '#00FFFF', marginLeft: '5px' }}
-                                onClick={() => { setShowTokenInfoPopup(true); setCurrentInfoStep(1); }} // Start from step 1
+                                onClick={() => setShowTokenInfoPopup(prev => !prev)} // Toggle popup visibility
                             />
                         </label>
                         <input
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
-                            onFocus={() => { setShowTokenInfoPopup(true); setCurrentInfoStep(1); }} // Show popup on focus
                             className="input-field"
                             placeholder="Enter token"
                             disabled={isLoading}
@@ -212,52 +211,17 @@ export default function SignUpPage() {
                             <Info size={28} style={{ marginRight: '10px', color: '#00FFFF' }} /> Token Details
                         </h2>
 
-                        {currentInfoStep >= 1 && (
-                            <div style={{ marginBottom: '20px', animation: 'fadeIn 0.5s ease-out' }}>
-                                <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '1rem', lineHeight: '1.6' }}>
-                                    To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span>
-                                </p>
-                                {currentInfoStep < 3 && (
-                                    <button onClick={() => setCurrentInfoStep(prev => prev + 1)} style={{ background: '#00FFFF', color: '#1a1a1a', padding: '10px 20px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold', transition: 'background-color 0.3s ease' }}>
-                                        Next
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {currentInfoStep >= 2 && (
-                            <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
-                                <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
-                                    <DollarSign size={22} style={{ marginRight: '8px', color: '#22c55e' }} /> Pricing:
-                                </h3>
-                                <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
-                                    <li style={{ marginBottom: '8px' }}>✨ 3-Month: 300 Fire Cannon Balls</li>
-                                    <li style={{ marginBottom: '8px' }}>🌟 6-Month: 600 Fire Cannon Balls</li>
-                                    <li style={{ marginBottom: '8px' }}>💎 1-Year: 1200 Fire Cannon Balls</li>
-                                </ul>
-                                <p style={{ color: '#f39c12', fontSize: '0.85rem', fontStyle: 'italic', marginTop: '10px' }}>
-                                    ⚠️ Prices are fixed and non-negotiable.
-                                </p>
-                                {currentInfoStep < 3 && (
-                                    <button onClick={() => setCurrentInfoStep(prev => prev + 1)} style={{ background: '#00FFFF', color: '#1a1a1a', padding: '10px 20px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold', transition: 'background-color 0.3s ease', marginTop: '20px' }}>
-                                        Next
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {currentInfoStep >= 3 && (
-                            <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
-                                <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
-                                    <FileText size={22} style={{ marginRight: '8px', color: '#3498db' }} /> Terms:
-                                </h3>
-                                <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
-                                    <li style={{ marginBottom: '8px' }}>1. Prices may change based on demand.</li>
-                                    <li style={{ marginBottom: '8px' }}>2. Tokens issued ONLY after successful transfer of Fire Cannon Balls to the owner's account.</li>
-                                    <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default. * Subject to future change</li>
-                                </ul>
-                            </div>
-                        )}
+                        {/* Only show the Terms section */}
+                        <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
+                            <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
+                                <FileText size={22} style={{ marginRight: '8px', color: '#3498db' }} /> Terms:
+                            </h3>
+                            <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
+                                <li style={{ marginBottom: '8px' }}>1. Prices may change based on demand.</li>
+                                <li style={{ marginBottom: '8px' }}>2. Tokens issued ONLY after successful transfer of Fire Cannon Balls to the owner's account.</li>
+                                <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default. * Subject to future change</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             )}
