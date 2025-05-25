@@ -9,9 +9,9 @@ import {
 } from '@/lib/githubApiUtils';
 
 // Environment variables will be read by githubApiUtils or passed if needed
-const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'galaxykicklock7';
-const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline7';
-const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
+const ORG = process.env.GITHUB_ORG || 'galaxykicklock7'; // SECURITY FIX: Use server-side only env var
+const REPO = process.env.GITHUB_REPO || 'GalaxyKickPipeline7'; // SECURITY FIX: Use server-side only env var
+const WORKFLOW_FILE_NAME = process.env.GITHUB_WORKFLOW_FILE || 'blank.yml'; // SECURITY FIX: Use server-side only env var
 
 // Simplified types for frontend responses
 interface ClientSafeRunDetails { // Renamed and sanitized

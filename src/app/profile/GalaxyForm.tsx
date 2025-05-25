@@ -142,53 +142,105 @@ const GalaxyForm: React.FC = () => {
   }, [setDeploymentStatus, setIsDeployed, setIsUndeploying, setIsPollingStatus, setRedeployMode, setShowDeployPopup]);
 
   const handleUndeploy = useCallback(async () => {
-    clearAllPollingTimers(); 
+    clearAllPollingTimers();
     if (!username) { alert('Username not found.'); return; }
-    if (activationProgressTimerId !== null) { 
-      window.clearInterval(activationProgressTimerId); 
-      setActivationProgressTimerId(null); 
+    if (activationProgressTimerId !== null) {
+      window.clearInterval(activationProgressTimerId);
+      setActivationProgressTimerId(null);
     }
     setActivationProgressPercent(0);
-    [setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5].forEach(setter => setter(initialButtonStates));
-    [setError1, setError2, setError3, setError4, setError5].forEach(setter => setter([]));
-    
-    setIsUndeploying(true); setIsPollingStatus(true); setShowDeployPopup(true);
+
+    setIsUndeploying(true);
+    setIsPollingStatus(true);
+    setShowDeployPopup(true);
+    setDeploymentStatus('Stopping active services...');
+
+    const formDataSetters = [setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5];
+    const errorSetters = [setError1, setError2, setError3, setError4, setError5];
+    const formDatas = [formData1, formData2, formData3, formData4, formData5];
+    const allButtonStates = [buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5]; // Get current state values
+
+    const stopPromises: Promise<void>[] = [];
+    for (let i = 0; i < formDatas.length; i++) {
+      const formNumber = i + 1;
+      const currentButtonStatesSetter = formDataSetters[i];
+      const currentButtonStatesValue = allButtonStates[i]; // Use the current state value
+
+      // Check if the 'start' button is active, indicating a running service
+      if (formDatas[i].RC && currentButtonStatesValue.start.active) { // Corrected access
+        // Temporarily set loading state for the stop button
+        currentButtonStatesSetter(prev => ({ ...prev, stop: { ...prev.stop, loading: true } }));
+        stopPromises.push(
+          (async () => {
+            try {
+              // Directly call the logic from handleAction for 'stop'
+              const authHeaders = getApiAuthHeaders();
+              const modifiedFormData = Object.entries(formDatas[i]).reduce((acc, [key, value]) => { acc[`${key}${formNumber}`] = value; return acc; }, {} as Record<string, string>);
+              const response = await fetch(`/api/localt/action`, {
+                method: 'POST',
+                headers: authHeaders,
+                body: JSON.stringify({ action: 'stop', formNumber: formNumber, formData: modifiedFormData, logicalUsername: username })
+              });
+
+              if (response.ok) {
+                currentButtonStatesSetter(prev => ({
+                  ...prev,
+                  stop: { loading: false, active: true, text: 'Stopped' },
+                  start: { ...prev.start, active: false, text: 'Start' },
+                }));
+                errorSetters[i]([]);
+              } else {
+                const errorData = await response.json().catch(() => ({ message: "Unknown error" }));
+                errorSetters[i]([`Unable to stop form ${formNumber}: ${errorData.message || 'Please try again'}`]);
+                currentButtonStatesSetter(prev => ({ ...prev, stop: { ...prev.stop, loading: false, active: false, text: 'Stop' } }));
+              }
+            } catch (error) {
+              errorSetters[i]([`Unable to stop form ${formNumber}: Network error or client-side issue.`]);
+              currentButtonStatesSetter(prev => ({ ...prev, stop: { ...prev.stop, loading: false, active: false, text: 'Stop' } }));
+            }
+          })()
+        );
+      }
+    }
+
+    await Promise.all(stopPromises); // Wait for all stop commands to complete
+
     setDeploymentStatus('Attempting to cancel current deployment...');
-    const authHeaders = getApiAuthHeaders(); 
+    const authHeaders = getApiAuthHeaders();
     const suffixedUsernameForJobSearch = username;
     try {
-      if (!suffixedUsernameForJobSearch) { 
-        alert('Logical username not available for undeploy operation.'); 
-        setIsUndeploying(false); setShowDeployPopup(true); return; 
+      if (!suffixedUsernameForJobSearch) {
+        alert('Logical username not available for undeploy operation.');
+        setIsUndeploying(false); setShowDeployPopup(true); return;
       }
       const latestRunResponse = await fetch(`/api/git/latest-user-run?logicalUsername=${suffixedUsernameForJobSearch}&activeOnly=true`, { headers: authHeaders });
       if (latestRunResponse.ok) {
         const latestRunData = await latestRunResponse.json() as LatestUserRunResponse;
         if (latestRunData.jobName !== `Run for ${suffixedUsernameForJobSearch}`) {
-          setDeploymentStatus(`Found an active run, but not the target deployment for "Run for ${suffixedUsernameForJobSearch}".`); 
+          setDeploymentStatus(`Found an active run, but not the target deployment for "Run for ${suffixedUsernameForJobSearch}".`);
           setIsUndeploying(false); setShowDeployPopup(true); return;
         }
         if (latestRunData.status === 'in_progress' || latestRunData.status === 'queued' || latestRunData.status === 'waiting') {
           const runIdToCancel = latestRunData.runId;
           const cancelResponse = await fetch(`/git/galaxyapi/runs?cancelRunId=${runIdToCancel}`, { method: 'POST', headers: authHeaders });
-          if (cancelResponse.status === 202) { 
-            setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`); 
-            pollForCancelledStatus(runIdToCancel); 
+          if (cancelResponse.status === 202) {
+            setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
+            pollForCancelledStatus(runIdToCancel);
           }
           else { throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${ (await cancelResponse.json().catch(()=>({}))).message || await cancelResponse.text()}`); }
-        } else { 
-          setDeploymentStatus(`No active (in_progress/queued) deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel. Latest status: ${latestRunData.status}.`); 
-          setIsUndeploying(false); setShowDeployPopup(true); return; 
+        } else {
+          setDeploymentStatus(`No active (in_progress/queued) deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel. Latest status: ${latestRunData.status}.`);
+          setIsUndeploying(false); setShowDeployPopup(true); return;
         }
         } else if (latestRunResponse.status === 404) {
           setDeploymentStatus(`No active deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel.`);
           setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true); return;
         } else { throw new Error(`Failed to fetch latest run for undeploy: ${latestRunResponse.status} ${await latestRunResponse.text()}`); }
       } catch (error: any) {
-        setDeploymentStatus(`Error during undeploy: ${error.message}. You may need to redeploy.`);
+        setDeploymentStatus(`An error occurred during undeployment. Please try again.`); // Generic error message
         setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true);
       }
-    }, [username, clearAllPollingTimers, activationProgressTimerId, pollForCancelledStatus, setActivationProgressTimerId, setActivationProgressPercent, setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5, setError1, setError2, setError3, setError4, setError5, setIsUndeploying, setIsPollingStatus, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setRedeployMode ]);
+    }, [username, clearAllPollingTimers, activationProgressTimerId, pollForCancelledStatus, setActivationProgressTimerId, setActivationProgressPercent, setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5, setError1, setError2, setError3, setError4, setError5, setIsUndeploying, setIsPollingStatus, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setRedeployMode, formData1, formData2, formData3, formData4, formData5, buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5 ]);
   
     const handleLogout = useCallback(async () => {
       if (activationProgressTimerId !== null) {
@@ -197,15 +249,15 @@ const GalaxyForm: React.FC = () => {
       }
       if (isDeployed) {
         setShowDeployPopup(true);
-        try { await handleUndeploy(); } catch (err) { console.error("Error during undeploy on logout:", err); }
+        try { await handleUndeploy(); } catch (err) { console.error("Error during undeploy on logout."); } // Generic error
       }
       try {
         const response = await fetch('/api/auth/signout', { method: 'POST', headers: getApiAuthHeaders() });
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          console.error('Logout API call failed:', errorData.message || response.statusText);
+          console.error('Logout API call failed.'); // Generic error
         }
-      } catch (apiError) { console.error('Error calling logout API:', apiError); }
+      } catch (apiError) { console.error('Error calling logout API.'); } // Generic error
       sessionStorage.removeItem(STORAGE_KEYS.USERNAME);
       sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
       router.push('/signin');
@@ -231,7 +283,7 @@ const GalaxyForm: React.FC = () => {
           setDeploymentStatus('No deployment found for your user. Deployment is required.');
         } else {
           const errorData = await response.json();
-          setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
+          setDeploymentStatus(`Error checking status. Please try again.`); // Generic error
           setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true); setIsPollingStatus(false);
         }
       } catch (error) {
@@ -246,9 +298,9 @@ const GalaxyForm: React.FC = () => {
         const signoutResponse = await fetch('/api/auth/signout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
         if (!signoutResponse.ok) {
           const errorData = await signoutResponse.json().catch(() => ({}));
-          console.warn(`[StaleSession] Call to /api/auth/signout responded with ${signoutResponse.status}: ${errorData.message || signoutResponse.statusText}.`);
+          console.warn(`[StaleSession] Failed to sign out cleanly.`); // Generic warning
         } else { console.log('[StaleSession] /api/auth/signout call reported success.'); }
-    } catch (error) { console.error('[StaleSession] Error calling /api/auth/signout:', error); }
+    } catch (error) { console.error('[StaleSession] Error during signout process.'); } // Generic error
     sessionStorage.removeItem(STORAGE_KEYS.USERNAME); 
     sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
     setUsername(null); setDisplayedUsername(null); setIsDeployed(false); setCurrentUserIdState(null); 
@@ -329,7 +381,7 @@ const GalaxyForm: React.FC = () => {
                 handleStaleSession();
             }
         })
-        .subscribe(status => { if (status !== 'SUBSCRIBED') console.error(`Failed to subscribe to session_updates: ${status}`); });
+        .subscribe(status => { /* Suppress console error for subscription status */ });
     const beforeUnloadHandler = () => { 
       const storedUser = sessionStorage.getItem(STORAGE_KEYS.USERNAME);
       if (storedUser && navigator.sendBeacon) navigator.sendBeacon('/api/auth/beacon-signout-undeploy', new Blob([JSON.stringify({})], {type : 'application/json'})); 
@@ -442,7 +494,7 @@ const GalaxyForm: React.FC = () => {
         else {
           if (findRunIdTimerRef.current !== null) window.clearInterval(findRunIdTimerRef.current);
           findRunIdTimerRef.current = null;
-          setDeploymentStatus(`Error finding workflow run: ${error instanceof Error ? error.message : String(error)}`);
+          setDeploymentStatus(`An error occurred while locating the workflow run.`); // Generic error message
           setIsPollingStatus(false); setRedeployMode(true);
         }
       }
@@ -472,7 +524,7 @@ const GalaxyForm: React.FC = () => {
       }
     } catch (error) {
       setIsDeploying(false);
-      setDeploymentStatus(`Dispatch error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setDeploymentStatus(`An error occurred during deployment dispatch.`); // Generic error message
       setIsDeployed(false);
       setIsPollingStatus(false); // Ensure polling status is false on dispatch error
       setRedeployMode(true);
@@ -502,6 +554,7 @@ const GalaxyForm: React.FC = () => {
     const numericValue = timeFields.includes(name) ? value.replace(/\D/g, '').slice(0, 5) : value;
     const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber-1];
     setFormData(prev => ({ ...prev, [name]: numericValue }));
+    setToastMessage(null); // Clear toast message on any input change
   };
 
   const handleAction = (formNumber: number) => async (action: ActionType) => {
@@ -529,6 +582,7 @@ const GalaxyForm: React.FC = () => {
           ...(action === 'stop' ? { start: { ...prev.start, active: false, text: 'Start' }, } : {}),
           ...(action === 'update' ? { update: { loading: false, active: true, text: 'Updated' } } : {})
         })); setError([]);
+        setToastMessage(null); // Clear toast message on successful action
       } else if (response.status === 409) {
         const errorData = await response.json();
         if (errorData.autoUndeployed) {

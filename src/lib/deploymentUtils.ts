@@ -3,8 +3,8 @@ import { updateUserDeployStatus } from '@/lib/auth';
 import { fetchFromGitHub, GitHubRun } from '@/lib/githubApiUtils'; // Import for direct GitHub API calls
 
 // Constants for GitHub API, mirroring those in /git/galaxyapi/runs/route.ts
-const GITHUB_ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
-const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
+const GITHUB_ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'galaxykicklock7';
+const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline7';
 
 /**
  * Generates the logical username for loca.lt services.
@@ -42,8 +42,8 @@ export async function performServerSideUndeploy(
   // Ensure Supabase client is available
   let SClient = supabaseService; // Renamed to avoid conflict with 'client' if it's a global/module var
   if (!SClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Use server-side only URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !supabaseServiceRoleKey) {
       console.error('[ServerUndeploy] Supabase client cannot be initialized (missing URL or Service Key).');
       return { success: false, message: 'Server configuration error for undeploy.' };
@@ -117,15 +117,16 @@ export async function performServerSideUndeploy(
   await updateUserDeployStatus(userId, null, null, null); // Clear timestamp, formNumber, and runId
   console.log(`[ServerUndeploy] Cleared all deployment fields (timestamp, form, runId) in Supabase for user ${userId}.`);
 
-  const overallSuccess = locaLtStopSuccess && githubCancelSuccess; // Use githubCancelSuccess
-  const finalMessage = `loca.lt: ${locaLtMessage} GitHub: ${githubCancelMessage} DB status cleared.`; // Use githubCancelMessage
+  const overallSuccess = locaLtStopSuccess && githubCancelSuccess;
+  // The detailed messages are for server-side logging/debugging.
+  // For the client, we want a more generic message on failure.
+  const detailedLogMessage = `loca.lt: ${locaLtMessage} GitHub: ${githubCancelMessage} DB status cleared.`;
 
   if (overallSuccess) {
-    return { success: true, message: finalMessage };
+    return { success: true, message: detailedLogMessage };
   } else {
-    // If either part failed but we proceeded, it's a partial success from a "cleared DB" perspective
-    // but a failure from "ensured everything undeployed cleanly" perspective.
-    // The caller (signin route) will decide if this is acceptable.
-    return { success: false, message: `Undeploy partially failed. ${finalMessage}` };
+    // For partial or full failure, provide a user-friendly message.
+    // The detailedLogMessage is already console.error'd above for GitHub/loca.lt failures.
+    return { success: false, message: `Failed to undeploy previous active session. Undeploy partially failed. Please try again or contact support.` };
   }
 }

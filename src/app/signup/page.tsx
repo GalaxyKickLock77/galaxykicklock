@@ -13,6 +13,8 @@ export default function SignUpPage() {
     const [token, setToken] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showTokenInfoPopup, setShowTokenInfoPopup] = useState(false);
+    const [currentInfoStep, setCurrentInfoStep] = useState(0); // 0: hidden, 1: Discord, 2: Pricing, 3: Terms
+    const [tokenInputClickCount, setTokenInputClickCount] = useState(0); // New state for click count
     const router = useRouter();
 
     const showToast = (message: string, type: 'success' | 'error' = 'error') => {
@@ -36,8 +38,8 @@ export default function SignUpPage() {
         
         setIsLoading(true);
         try {
-            if (!username.trim() || !password.trim()) {
-                showToast("Username and password cannot be empty.");
+            if (!username.trim()) {
+                showToast("Username cannot be empty.");
                 setIsLoading(false);
                 return;
             }
@@ -46,6 +48,12 @@ export default function SignUpPage() {
             const usernameRegex = /^[a-zA-Z0-9]+$/;
             if (!usernameRegex.test(username)) {
                 showToast("Username can only contain alphanumeric characters (A-Z, a-z, 0-9) and no spaces or special characters.");
+                setIsLoading(false);
+                return;
+            }
+
+            if (!password.trim()) {
+                showToast("Password cannot be empty.");
                 setIsLoading(false);
                 return;
             }
@@ -63,12 +71,14 @@ export default function SignUpPage() {
                 return;
             }
 
-            // Call the backend API for signup
+            // Call the backend API for signup with security headers
             const response = await fetch('/api/auth/signup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest', // CSRF protection
                 },
+                credentials: 'same-origin', // Ensure cookies are sent
                 body: JSON.stringify({ username, password, token }),
             });
 
@@ -143,13 +153,23 @@ export default function SignUpPage() {
                             <Info
                                 size={16}
                                 style={{ cursor: 'pointer', color: '#00FFFF', marginLeft: '5px' }}
-                                onClick={() => setShowTokenInfoPopup(true)}
+                                onClick={() => { setShowTokenInfoPopup(true); setCurrentInfoStep(1); }} // Always show popup for info icon
                             />
                         </label>
                         <input
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
+                            onFocus={() => {
+                                setTokenInputClickCount(prevCount => prevCount + 1);
+                                if (tokenInputClickCount % 2 === 0) { // On 1st, 3rd, 5th... click (0-indexed)
+                                    setShowTokenInfoPopup(true);
+                                    setCurrentInfoStep(1);
+                                } else { // On 2nd, 4th, 6th... click
+                                    setShowTokenInfoPopup(false);
+                                    setCurrentInfoStep(0);
+                                }
+                            }}
                             className="input-field"
                             placeholder="Enter token"
                             disabled={isLoading}
@@ -185,7 +205,7 @@ export default function SignUpPage() {
                         animation: 'fadeIn 0.3s ease-out'
                     }}>
                         <button
-                            onClick={() => setShowTokenInfoPopup(false)}
+                            onClick={() => { setShowTokenInfoPopup(false); setCurrentInfoStep(0); }} // Reset step on close
                             style={{
                                 position: 'absolute', top: '15px', right: '15px',
                                 background: 'none', border: 'none', color: '#aaa',
@@ -202,11 +222,13 @@ export default function SignUpPage() {
                             <Info size={28} style={{ marginRight: '10px', color: '#00FFFF' }} /> Token Details
                         </h2>
 
-                        <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '1rem', lineHeight: '1.6' }}>
-                            To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span>
-                        </p>
+                        <div style={{ marginBottom: '20px', animation: 'fadeIn 0.5s ease-out' }}>
+                            <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '1rem', lineHeight: '1.6' }}>
+                                To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span>
+                            </p>
+                        </div>
 
-                        <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px' }}>
+                        <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
                             <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
                                 <DollarSign size={22} style={{ marginRight: '8px', color: '#22c55e' }} /> Pricing:
                             </h3>
@@ -220,7 +242,7 @@ export default function SignUpPage() {
                             </p>
                         </div>
 
-                        <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px' }}>
+                        <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
                             <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
                                 <FileText size={22} style={{ marginRight: '8px', color: '#3498db' }} /> Terms:
                             </h3>
