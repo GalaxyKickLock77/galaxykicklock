@@ -173,6 +173,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Failed to update session.' }, { status: 500 });
     }
 
+
     const response = NextResponse.json({
       message: 'Sign in successful.',
       username: user.username

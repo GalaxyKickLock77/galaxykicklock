@@ -55,7 +55,7 @@ export default function RootLayout({
     }
   }, []);
 
-  const handleStaleSession = useCallback(async (reason: 'admin_removed_token' | 'token_expired' | 'session_terminated') => {
+  const handleStaleSession = useCallback(async (reason: 'admin_removed_token' | 'token_expired' | 'session_terminated' | 'new_session_opened_elsewhere') => {
     let message = '';
     let redirectDelay = 5000; // Default delay
 
@@ -68,11 +68,16 @@ export default function RootLayout({
         message = "Your token has expired. Please renew the token to login the application.";
         setShowAdminBlockPopup(true); // Use this for token expired message
         break;
-      case 'session_terminated':
+      case 'new_session_opened_elsewhere': // Handle this specific reason directly
+        message = "A new session has been opened in another tab/browser. You have been logged out from this session.";
+        redirectDelay = 3500;
+        setShowAdminBlockPopup(false);
+        break;
+      case 'session_terminated': // Generic session termination
       default:
         message = "Your session has been terminated. You will be redirected to the sign-in page shortly.";
-        setShowAdminBlockPopup(false); // Don't show specific popup for generic termination
-        redirectDelay = 1000; // Faster redirect for generic termination
+        setShowAdminBlockPopup(false);
+        redirectDelay = 1000;
         break;
     }
 
@@ -97,6 +102,25 @@ export default function RootLayout({
 
   const pathname = usePathname();
 
+  // Store the current tab's session ID in localStorage for cross-tab communication
+  // This is updated whenever session details are fetched, making the current tab primary.
+  const updateCurrentTabSessionId = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/session-details');
+      if (response.ok) {
+        const details = await response.json();
+        if (details.sessionId) {
+          localStorage.setItem('currentTabSessionId', details.sessionId);
+          console.log(`[Layout] Current tab's session ID set in localStorage: ${details.sessionId}`);
+        }
+      } else {
+        console.warn('Failed to fetch session details to set currentTabSessionId:', await response.text());
+      }
+    } catch (error) {
+      console.error('Error fetching session details to set currentTabSessionId:', error);
+    }
+  }, []);
+
   useEffect(() => {
     // Only fetch deployment status if not on the sign-in or sign-up page
     if (pathname !== '/signin' && pathname !== '/signup') {
@@ -106,10 +130,10 @@ export default function RootLayout({
     // Initialize Supabase client for client-side real-time updates
     // Only subscribe to session updates if not on an admin page
     if (supabaseUrl && supabaseAnonKey && !pathname.startsWith('/admin')) {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      const channel = supabase.channel('session_updates');
+      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey); // Renamed to avoid conflict
+      const sessionChannel = supabaseClient.channel('session_updates'); // Renamed channel variable
 
-      channel.on(
+      sessionChannel.on(
         'broadcast',
         { event: 'token_expired' },
         (payload) => {
@@ -121,17 +145,20 @@ export default function RootLayout({
         { event: 'session_terminated' },
         (payload) => {
           console.log('[Layout] Received session_terminated broadcast:', payload);
-          handleStaleSession('session_terminated'); // Generic session termination
+          // Pass the reason from the payload, which could be 'new_session_opened_elsewhere'
+          handleStaleSession(payload.payload.reason); 
         }
       ).subscribe();
+      // Removed the 'new_session_opened' listener here as the logic is now handled by validateSession
+      // which broadcasts 'session_terminated' with a specific reason.
 
       return () => {
-        channel.unsubscribe();
+        sessionChannel.unsubscribe(); // Use sessionChannel here
       };
     } else if (!pathname.startsWith('/admin')) {
       console.error('Supabase client not initialized in RootLayout due to missing env vars (NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY).');
     }
-  }, [fetchDeploymentStatus, handleStaleSession, pathname]);
+  }, [fetchDeploymentStatus, handleStaleSession, pathname]); // Removed updateCurrentTabSessionId from dependencies
 
   return (
     <html lang="en">

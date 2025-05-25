@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ToastContainer, toast } from 'react-toastify';
@@ -15,10 +15,10 @@ export default function SignInPage() {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
-    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error') => {
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error', autoClose: number = 3000) => {
         toast[type](message, {
             position: "top-right",
-            autoClose: type === 'info' ? 7000 : 3000,
+            autoClose: autoClose,
             hideProgressBar: false,
             closeOnClick: true,
             pauseOnHover: true,
@@ -26,6 +26,15 @@ export default function SignInPage() {
             theme: "dark"
         });
     };
+
+    // Effect to check for the 'newSessionOpenedElsewhere' flag on mount
+    useEffect(() => {
+        const newSessionFlag = localStorage.getItem('newSessionOpenedElsewhere');
+        if (newSessionFlag) {
+            showToast("A new session was opened elsewhere. You have been logged out from this session.", 'info', 5000);
+            localStorage.removeItem('newSessionOpenedElsewhere'); // Clear the flag
+        }
+    }, []); // Run only once on component mount
 
     const validateInputs = () => {
         if (!username.trim() || !password.trim()) {

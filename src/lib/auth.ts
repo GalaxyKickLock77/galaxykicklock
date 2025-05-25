@@ -13,6 +13,7 @@ export interface UserSession {
   tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
   lastLogout?: string | null; // Change lastLogoutAt to lastLogout
   tokenRemoved?: boolean | null; // Add tokenRemoved to the session object
+  activeSessionId?: string | null; // Add activeSessionId to the session object
 }
 
 const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Server-side only
@@ -161,8 +162,40 @@ export async function validateSession(request: NextRequest): Promise<UserSession
       return null; // Invalidate session
     }
 
-    // Validate the session token and active session ID
-    if (user.session_token === requestToken && user.active_session_id === requestSessionId) {
+    // Validate the session token
+    if (user.session_token === requestToken) {
+      // If there's no active session ID in the DB, or if it's different from the request's sessionId,
+      // then this request's sessionId should become the new active one.
+      // This handles initial login and new tab/browser openings.
+      if (!user.active_session_id || user.active_session_id !== requestSessionId) {
+        console.log(`[validateSession] Updating active_session_id for user ${user.username} from ${user.active_session_id || 'null'} to ${requestSessionId}.`);
+        const { error: updateSessionIdError } = await supabaseService
+          .from('users')
+          .update({ active_session_id: requestSessionId })
+          .eq('id', requestUserId);
+
+        if (updateSessionIdError) {
+          console.error('Error updating active_session_id in DB:', updateSessionIdError.message);
+          // This is a non-critical error for the current request, but might lead to inconsistencies.
+        } else {
+          // If an old session existed and was different, broadcast termination for it.
+          if (user.active_session_id && user.active_session_id !== requestSessionId) {
+            try {
+              await supabaseService
+                .channel('session_updates')
+                .send({
+                  type: 'broadcast',
+                  event: 'session_terminated',
+                  payload: { userId: user.id, reason: 'new_session_opened_elsewhere' } // Specific reason
+                });
+              console.log(`[validateSession] Broadcasted session_terminated for user ${user.id} due to new session opened elsewhere.`);
+            } catch (broadcastEx: any) {
+              console.error(`[validateSession] Exception during session_terminated broadcast for user ${user.id}:`, broadcastEx.message);
+            }
+          }
+        }
+      }
+
       console.log('Session validated for user (validateSession):', user.username);
       return { 
         userId: user.id.toString(), 
@@ -173,11 +206,10 @@ export async function validateSession(request: NextRequest): Promise<UserSession
         token: user.token, // Include the token value
         tokenExpiresAt: tokenExpiresAt, // Include the fetched expiry
         tokenRemoved: user.token_removed, // Include tokenRemoved status
+        activeSessionId: requestSessionId, // Return the request's sessionId as the active one
       };
     } else {
-      console.log('Session validation failed (validateSession): Token or Session ID mismatch.');
-      if (user.session_token !== requestToken) console.log('Reason (validateSession): session_token mismatch');
-      if (user.active_session_id !== requestSessionId) console.log('Reason (validateSession): active_session_id mismatch');
+      console.log('Session validation failed (validateSession): Session token mismatch.');
       return null;
     }
   } catch (error: any) {
