@@ -13,7 +13,8 @@ export default function SignUpPage() {
     const [token, setToken] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showTokenInfoPopup, setShowTokenInfoPopup] = useState(false);
-    const [currentInfoStep, setCurrentInfoStep] = useState(3); // Always start at step 3 (Terms)
+    const [currentInfoStep, setCurrentInfoStep] = useState(0); // 0: hidden, 1: Discord, 2: Pricing, 3: Terms
+    const [tokenInputClickCount, setTokenInputClickCount] = useState(0); // New state for click count
     const router = useRouter();
 
     const showToast = (message: string, type: 'success' | 'error' = 'error') => {
@@ -152,13 +153,23 @@ export default function SignUpPage() {
                             <Info
                                 size={16}
                                 style={{ cursor: 'pointer', color: '#00FFFF', marginLeft: '5px' }}
-                                onClick={() => setShowTokenInfoPopup(prev => !prev)} // Toggle popup visibility
+                                onClick={() => { setShowTokenInfoPopup(true); setCurrentInfoStep(1); }} // Always show popup for info icon
                             />
                         </label>
                         <input
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
+                            onFocus={() => {
+                                setTokenInputClickCount(prevCount => prevCount + 1);
+                                if (tokenInputClickCount % 2 === 0) { // On 1st, 3rd, 5th... click (0-indexed)
+                                    setShowTokenInfoPopup(true);
+                                    setCurrentInfoStep(1);
+                                } else { // On 2nd, 4th, 6th... click
+                                    setShowTokenInfoPopup(false);
+                                    setCurrentInfoStep(0);
+                                }
+                            }}
                             className="input-field"
                             placeholder="Enter token"
                             disabled={isLoading}
@@ -211,7 +222,26 @@ export default function SignUpPage() {
                             <Info size={28} style={{ marginRight: '10px', color: '#00FFFF' }} /> Token Details
                         </h2>
 
-                        {/* Only show the Terms section */}
+                        <div style={{ marginBottom: '20px', animation: 'fadeIn 0.5s ease-out' }}>
+                            <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '1rem', lineHeight: '1.6' }}>
+                                To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span>
+                            </p>
+                        </div>
+
+                        <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
+                            <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
+                                <DollarSign size={22} style={{ marginRight: '8px', color: '#22c55e' }} /> Pricing:
+                            </h3>
+                            <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
+                                <li style={{ marginBottom: '8px' }}>✨ 3-Month: 300 Fire Cannon Balls</li>
+                                <li style={{ marginBottom: '8px' }}>🌟 6-Month: 600 Fire Cannon Balls</li>
+                                <li style={{ marginBottom: '8px' }}>💎 1-Year: 1200 Fire Cannon Balls</li>
+                            </ul>
+                            <p style={{ color: '#f39c12', fontSize: '0.85rem', fontStyle: 'italic', marginTop: '10px' }}>
+                                ⚠️ Prices are fixed and non-negotiable.
+                            </p>
+                        </div>
+
                         <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
                             <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
                                 <FileText size={22} style={{ marginRight: '8px', color: '#3498db' }} /> Terms:
