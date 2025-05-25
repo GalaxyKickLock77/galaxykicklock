@@ -5,7 +5,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { toast } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
+import 'react-toastify/dist/ReactToastify.css';
 import { createClient } from '@supabase/supabase-js'; // Import Supabase client
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -92,7 +93,21 @@ export default function RootLayout({
       theme: "dark"
     });
 
-    console.log(`[Layout] Session stale reason: ${reason}. Redirecting...`);
+    console.log(`[Layout] Session stale reason: ${reason}. Clearing session before redirect...`);
+    
+    // Clear the session on the client side by calling signout API
+    try {
+      await fetch('/api/auth/signout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      console.log('[Layout] Session cleared successfully');
+    } catch (error) {
+      console.error('[Layout] Error clearing session:', error);
+    }
+
     setTimeout(() => {
       setShowAdminBlockPopup(false); // Hide popup after delay
       router.push("/signin");
@@ -143,10 +158,34 @@ export default function RootLayout({
       ).on(
         'broadcast',
         { event: 'session_terminated' },
-        (payload) => {
+        async (payload) => {
           console.log('[Layout] Received session_terminated broadcast:', payload);
-          // Pass the reason from the payload, which could be 'new_session_opened_elsewhere'
-          handleStaleSession(payload.payload.reason); 
+          
+          // Check if this broadcast is for the current session
+          try {
+            const response = await fetch('/api/auth/session-details');
+            if (response.ok) {
+              const details = await response.json();
+              const currentSessionId = details.sessionId;
+              const broadcastOldSessionId = payload.payload.oldSessionId;
+              
+              // Only handle the termination if it's for this session
+              if (!broadcastOldSessionId || currentSessionId === broadcastOldSessionId) {
+                console.log('[Layout] Session termination is for this tab, handling...');
+                handleStaleSession(payload.payload.reason);
+              } else {
+                console.log('[Layout] Session termination is for a different session, ignoring...');
+              }
+            } else {
+              // If we can't get session details, assume it's for us (safer)
+              console.log('[Layout] Could not verify session, handling termination...');
+              handleStaleSession(payload.payload.reason);
+            }
+          } catch (error) {
+            console.error('[Layout] Error checking session details:', error);
+            // On error, handle the termination to be safe
+            handleStaleSession(payload.payload.reason);
+          }
         }
       ).subscribe();
       // Removed the 'new_session_opened' listener here as the logic is now handled by validateSession
@@ -165,6 +204,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ToastContainer />
         {children}
         {/* The popup is now controlled by the toast messages, but keeping this for specific admin/token messages if needed */}
         {showAdminBlockPopup && (

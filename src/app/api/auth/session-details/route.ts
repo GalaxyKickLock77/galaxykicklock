@@ -33,5 +33,7 @@ export async function GET(request: NextRequest) {
     username: session.username,
     tokenExpiresAt: tokenExpiresAtToSend,
     sessionId: session.activeSessionId, // Return the activeSessionId from the validated session
+    deployTimestamp: session.deployTimestamp,
+    activeFormNumber: session.activeFormNumber,
   });
 }

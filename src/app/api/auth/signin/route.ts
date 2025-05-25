@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user, error: authError } = await supabaseService
       .from("users")
-      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout, token_removed")
+      .select("id, username, password, session_token, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id, last_logout, token_removed")
       .eq("username", username)
       .single();
 
@@ -111,8 +111,12 @@ export async function POST(request: NextRequest) {
     const newSessionToken = generateSessionToken();
     const newSessionId = generateSessionId();
 
-    if (user.active_session_id) {
-      console.log(`[SignIn] User ${user.username} (ID: ${user.id}) is signing in, potentially terminating existing session ${user.active_session_id}.`);
+    // Only broadcast session termination if there's an active_session_id
+    // We'll check if it's a truly active session by verifying the session_token exists
+    const hasActiveSession = user.active_session_id && user.session_token;
+    
+    if (hasActiveSession) {
+      console.log(`[SignIn] User ${user.username} (ID: ${user.id}) is signing in with an existing active session ${user.active_session_id}. Will terminate old session.`);
 
       const hasActiveGitHubRun = user.deploy_timestamp && user.active_run_id;
       const hasActiveLocaltForm = user.deploy_timestamp && user.active_form_number && user.active_form_number > 0;
@@ -140,14 +144,18 @@ export async function POST(request: NextRequest) {
         console.log(`[SignIn] No active deployment (neither GitHub run nor loca.lt form) found for user ${user.username} to undeploy during new sign-in.`);
       }
 
-      console.log(`[SignIn] Broadcasting session_terminated event for user ${user.id}'s old session.`);
+      console.log(`[SignIn] Broadcasting session_terminated event for user ${user.id}'s old session ${user.active_session_id}.`);
       try {
         const sendStatus = await supabaseService
           .channel('session_updates')
           .send({
             type: 'broadcast',
             event: 'session_terminated',
-            payload: { userId: user.id }
+            payload: {
+              userId: user.id,
+              reason: 'new_session_opened_elsewhere',
+              oldSessionId: user.active_session_id // Include the old session ID
+            }
           });
         if (sendStatus !== 'ok') {
             console.error("[SignIn] Error broadcasting session termination. Status:", sendStatus);

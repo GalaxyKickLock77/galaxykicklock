@@ -2,8 +2,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation"; // useRouter might not be needed if redirects are fully middleware handled
 import React, { Suspense, useEffect, useCallback } from "react";
-import { ToastContainer, toast } from 'react-toastify'; // toast might still be used for other notifications
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify'; // toast might still be used for other notifications
 import GalaxyForm from './GalaxyForm';
 
 // Supabase client and direct session validation logic removed.
@@ -46,18 +45,6 @@ function ProfileContent() {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-4 relative">
             {/* Logout button removed, handled by GalaxyForm component */}
-            <ToastContainer
-                position="top-right"
-                autoClose={3000}
-                hideProgressBar={false}
-                newestOnTop={false}
-                closeOnClick
-                rtl={false}
-                pauseOnFocusLoss
-                draggable
-                pauseOnHover
-                theme="light"
-            />
             <GalaxyForm />
         </div>
     );
