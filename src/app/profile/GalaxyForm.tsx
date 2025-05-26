@@ -47,6 +47,7 @@ const GalaxyForm: React.FC = () => {
   const [activationProgressPercent, setActivationProgressPercent] = useState<number>(0);
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
+  const [showAdminBlockPopup, setShowAdminBlockPopup] = useState<boolean>(false); // New state for admin block popup
   const [tokenExpiryDisplay, setTokenExpiryDisplay] = useState<string | null>(null);
   const [currentUserIdState, setCurrentUserIdState] = useState<string | null>(null);
 
@@ -254,10 +255,14 @@ const GalaxyForm: React.FC = () => {
       try {
         const response = await fetch('/api/auth/signout', { method: 'POST', headers: getApiAuthHeaders() });
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Logout API call failed.'); // Generic error
+          // Suppress console error for logout API call failure, as it might be expected for already logged out users
+          // const errorData = await response.json().catch(() => ({}));
+          // console.error('Logout API call failed.'); 
         }
-      } catch (apiError) { console.error('Error calling logout API.'); } // Generic error
+      } catch (apiError) { 
+        // Suppress console error for network/client-side errors during logout API call
+        // console.error('Error calling logout API.'); 
+      }
       sessionStorage.removeItem(STORAGE_KEYS.USERNAME);
       sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
       router.push('/signin');
@@ -292,25 +297,8 @@ const GalaxyForm: React.FC = () => {
       }
     }, [setDeploymentStatus, setIsDeployed, setShowDeployPopup, setRedeployMode, setIsPollingStatus]);
 
-  const handleStaleSession = useCallback(async () => {
-    setToastMessage('This session has been logged out by a new login elsewhere. Redirecting...');
-    try {
-        const signoutResponse = await fetch('/api/auth/signout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-        if (!signoutResponse.ok) {
-          const errorData = await signoutResponse.json().catch(() => ({}));
-          console.warn(`[StaleSession] Failed to sign out cleanly.`); // Generic warning
-        } else { console.log('[StaleSession] /api/auth/signout call reported success.'); }
-    } catch (error) { console.error('[StaleSession] Error during signout process.'); } // Generic error
-    sessionStorage.removeItem(STORAGE_KEYS.USERNAME); 
-    sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
-    setUsername(null); setDisplayedUsername(null); setIsDeployed(false); setCurrentUserIdState(null); 
-    clearAllPollingTimers(); setIsPollingStatus(false);          
-    if (activationProgressTimerId !== null) {
-        window.clearInterval(activationProgressTimerId);
-        setActivationProgressTimerId(null);
-    }
-    router.push('/signin'); 
-  }, [router, clearAllPollingTimers, activationProgressTimerId, setToastMessage, setUsername, setDisplayedUsername, setIsDeployed, setCurrentUserIdState, setIsPollingStatus, setActivationProgressTimerId]);
+  // Removed handleStaleSession from here, as it will be handled globally in layout.tsx
+  // The session_updates listener will dispatch a custom event.
 
   const fetchSessionDetails = useCallback(async () => {
     try {
@@ -372,19 +360,29 @@ const GalaxyForm: React.FC = () => {
     if (supabaseUrl && supabaseAnonKey) supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
     else { console.error('Supabase URL or Anon Key not configured.'); return; }
 
-    fetchSessionDetails(); 
+    fetchSessionDetails();
     const channel = supabaseInstance.channel('session_updates');
     channel
         .on('broadcast', { event: 'session_terminated' }, (message) => {
-            const storedUserId = sessionStorage.getItem(STORAGE_KEYS.USER_ID); 
+            console.log('[GalaxyForm] Received broadcast:', message);
+            const storedUserId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
+            console.log('[GalaxyForm] Stored UserId:', storedUserId);
             if (message.payload && message.payload.userId && storedUserId && message.payload.userId.toString() === storedUserId) {
-                handleStaleSession();
+                console.log('[GalaxyForm] User ID matched. Dispatching globalSessionTerminated event.');
+                const event = new CustomEvent('globalSessionTerminated', {
+                    detail: { isAdminBlocked: message.payload.reason === 'admin_blocked' }
+                });
+                window.dispatchEvent(event);
+            } else {
+                console.log('[GalaxyForm] User ID mismatch or missing payload data. Not dispatching event.');
             }
         })
-        .subscribe(status => { /* Suppress console error for subscription status */ });
-    const beforeUnloadHandler = () => { 
+        .subscribe(status => {
+            console.log('[GalaxyForm] Supabase channel status:', status);
+        });
+    const beforeUnloadHandler = () => {
       const storedUser = sessionStorage.getItem(STORAGE_KEYS.USERNAME);
-      if (storedUser && navigator.sendBeacon) navigator.sendBeacon('/api/auth/beacon-signout-undeploy', new Blob([JSON.stringify({})], {type : 'application/json'})); 
+      if (storedUser && navigator.sendBeacon) navigator.sendBeacon('/api/auth/beacon-signout-undeploy', new Blob([JSON.stringify({})], {type : 'application/json'}));
     };
     window.addEventListener('beforeunload', beforeUnloadHandler);
     return () => {
@@ -392,7 +390,7 @@ const GalaxyForm: React.FC = () => {
         if (activationProgressTimerId !== null) window.clearInterval(activationProgressTimerId);
         window.removeEventListener('beforeunload', beforeUnloadHandler);
     };
-  }, [isClient, router, handleStaleSession, fetchSessionDetails, activationProgressTimerId]);
+  }, [isClient, fetchSessionDetails, activationProgressTimerId]);
   
   const pollRunStatus = useCallback((runIdToPoll: number) => {
     setDeploymentStatus(`Monitoring run ID: ${runIdToPoll}. Waiting for status updates...`);

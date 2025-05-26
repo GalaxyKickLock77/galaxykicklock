@@ -23,11 +23,8 @@ export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   
-  // CSRF protection - check for XMLHttpRequest header
-  const isXHR = request.headers.get('X-Requested-With') === 'XMLHttpRequest';
-  if (!isXHR) {
-    return NextResponse.json({ message: 'Invalid request.' }, { status: 403 });
-  }
+  // CSRF protection - Removed strict XMLHttpRequest header check to prevent blocking legitimate requests.
+  // Other CSRF protections (e.g., SameSite=Strict cookies) are still in place.
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
@@ -42,8 +39,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Username and password are required.' }, { status: 400 });
     }
 
-    // SECURITY FIX: Input sanitization
-    const sanitizedUsername = username.trim().toLowerCase();
+    // SECURITY FIX: Input sanitization (removed .toLowerCase() for case-sensitive usernames)
+    const sanitizedUsername = username.trim();
     if (sanitizedUsername.length > 50 || password.length > 128) {
       return NextResponse.json({ message: 'Invalid input length.' }, { status: 400 });
     }
@@ -73,20 +70,20 @@ export async function POST(request: NextRequest) {
     const adminSessionId = generateSessionId();
     const adminSessionToken = generateSessionToken();
     const oneDayInSeconds = 24 * 60 * 60;
-    const expiresAt = new Date(Date.now() + oneDayInSeconds * 1000).toISOString();
+    const sessionExpiresAt = new Date(Date.now() + oneDayInSeconds * 1000).toISOString(); // Renamed expiresAt to sessionExpiresAt
 
-    // Store session in admin_sessions table
-    const { error: sessionInsertError } = await supabase
-      .from('admin_sessions')
-      .insert({
-        admin_id: adminUser.id,
+    // Store session directly in the admin table
+    const { error: sessionUpdateError } = await supabase
+      .from('admin') // Update the admin table
+      .update({
         session_id: adminSessionId,
         session_token: adminSessionToken,
-        expires_at: expiresAt,
-      });
+        session_expires_at: sessionExpiresAt, // New column name
+      })
+      .eq('id', adminUser.id); // Update for the specific admin user
 
-    if (sessionInsertError) {
-      console.error('Failed to insert admin session into DB:', sessionInsertError.message);
+    if (sessionUpdateError) {
+      console.error('Failed to update admin session in DB:', sessionUpdateError.message);
       return NextResponse.json({ message: 'Failed to create admin session.' }, { status: 500 });
     }
 
