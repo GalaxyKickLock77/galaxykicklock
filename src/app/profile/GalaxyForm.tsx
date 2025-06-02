@@ -854,13 +854,36 @@ const GalaxyForm: React.FC = () => {
             <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'center' }}>{label}</label>
               {type === 'checkbox' ? (
-                <input
-                  type="checkbox"
-                  name={key}
-                  checked={currentFormData[key as keyof FormData] as boolean}
-                  onChange={handleInputChange(formNumber)}
-                  style={{ width: '20px', height: '20px', margin: '0.5rem 0' }}
-                />
+                <div 
+                  onClick={() => {
+                    const currentValue = currentFormData[key as keyof FormData] as boolean;
+                    const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                    setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                    setToastMessage(null);
+                  }}
+                  style={{
+                    width: '40px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    backgroundColor: currentFormData[key as keyof FormData] ? '#22c55e' : '#ccc',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'background-color 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      backgroundColor: 'white',
+                      top: '2px',
+                      left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                      transition: 'left 0.2s',
+                    }}
+                  />
+                </div>
               ) : (
                 <>
                   <input
@@ -990,32 +1013,45 @@ const GalaxyForm: React.FC = () => {
       )}
       <div
         className={styles.header}
-        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '0px', backgroundColor: '#1a1a1a', borderRadius: '0px', margin: '0 0 20px 0', position: 'relative' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 20px', /* Adjusted padding */
+          backgroundColor: '#1a1a1a',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1000,
+          height: '60px', /* Fixed height for the header */
+          boxSizing: 'border-box'
+        }}
       >
         {displayedUsername && (
-          <div style={{ color: '#fff', fontSize: '1.1rem', position: 'absolute', left: '-770px', top: '-25px' }}>
+          <div style={{ color: '#fff', fontSize: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
             <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
               <span style={{ marginRight: '4px' }}>Welcome:</span>
               <span>{displayedUsername}</span>
             </div>
             {tokenExpiryDisplay && (
-              <div style={{ fontSize: '0.85rem', color: '#ccc', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', color: '#ccc', marginTop: '2px' }}>
                 Token Expires: {tokenExpiryDisplay}
               </div>
             )}
           </div>
         )}
-        <div style={{ marginLeft: 'auto' }}>
+        <h1 className={styles.title} style={{ margin: '0 auto', marginBottom: '-10px', marginRight: '600px',textAlign: 'center' }}> {/* Centered Kick Lock */}
+          <span className={styles.kickLock}>KICK ~ LOCK</span>
+        </h1>
+        <div>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
             <LogOut size={16} />
             <span>Logout</span>
           </button>
         </div>
       </div>
-      <h1 className={styles.title}>
-        <span className={styles.kickLock}>KICK ~ LOCK</span>
-      </h1>
-      <div className={styles.formContainer}>
+      <div className={styles.formContainer} style={{ marginTop: '60px' }}> {/* Added margin-top to prevent content overlap */}
         <div className={styles.tabsContainer}>
           {[1, 2, 3, 4, 5].map(num => (
             <button
