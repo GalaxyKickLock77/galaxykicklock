@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 type FormData = {
-  RC: string;
+  RC1: string;
+  RC2: string;
   startAttackTime: string;
   stopAttackTime: string;
   attackIntervalTime: string;
@@ -14,7 +15,8 @@ type FormData = {
   defenceIntervalTime: string;
   PlanetName: string;
   Rival: string;
-  standOnEnemy: boolean; // Added new field
+  standOnEnemy: boolean;
+  actionOnEnemy: boolean;
 };
 
 type ButtonState = { loading: boolean; active: boolean; text: string; };
@@ -88,7 +90,8 @@ const GalaxyForm: React.FC = () => {
       }
     }
     return {
-      RC: '',
+      RC1: '',
+      RC2: '',
       startAttackTime: '',
       stopAttackTime: '',
       attackIntervalTime: '',
@@ -97,7 +100,8 @@ const GalaxyForm: React.FC = () => {
       defenceIntervalTime: '',
       PlanetName: '',
       Rival: '',
-      standOnEnemy: false // Initialize new field
+      standOnEnemy: false,
+      actionOnEnemy: false
     };
   };
 
@@ -201,7 +205,7 @@ const GalaxyForm: React.FC = () => {
     setDeploymentStatus('Stopping active services...');
 
     const formDataSetters = [setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5];
-    const errorSetters = [setError1, setError2, setError3, setError4, setError5];
+    const errorSetters = [setError1, setError2, setError3, setError4, setError5];  // Fixed: changed setErrorpricing to setError2
     const formDatas = [formData1, formData2, formData3, formData4, formData5];
     const allButtonStates = [buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5];
 
@@ -211,7 +215,7 @@ const GalaxyForm: React.FC = () => {
       const currentButtonStatesSetter = formDataSetters[i];
       const currentButtonStatesValue = allButtonStates[i];
 
-      if (formDatas[i].RC && currentButtonStatesValue.start.active) {
+      if (formDatas[i].RC1 && currentButtonStatesValue.start.active) {
         currentButtonStatesSetter(prev => ({ ...prev, stop: { ...prev.stop, loading: true } }));
         stopPromises.push(
           (async () => {
@@ -765,7 +769,7 @@ const GalaxyForm: React.FC = () => {
     const setButtonStates = formDataSetters[formNumber - 1];
     const setError = errorSetters[formNumber - 1];
     const formData = formDatas[formNumber - 1];
-    const requiredFields: (keyof FormData)[] = ['RC', 'startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime', 'PlanetName', 'Rival'];
+    const requiredFields: (keyof FormData)[] = ['RC1', 'startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime', 'PlanetName', 'Rival'];
     const emptyFields = requiredFields.filter(field => !formData[field]);
     if (emptyFields.length > 0) {
       setError(emptyFields);
@@ -830,7 +834,8 @@ const GalaxyForm: React.FC = () => {
     const currentButtonStates = [buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5][formNumber - 1];
     const currentError = [error1, error2, error3, error4, error5][formNumber - 1];
     const inputFields = [
-      { key: 'RC', label: 'RC', color: '#FFFF00', type: 'text' },
+      { key: 'RC1', label: 'RC1', color: '#FFFF00', type: 'text' },
+      { key: 'RC2', label: 'RC2', color: '#FFFF00', type: 'text' },
       { key: 'PlanetName', label: 'Planet Name', color: '#FFFFFF', type: 'text' },
       { key: 'Rival', label: 'Rival', color: '#FFA500', type: 'text' },
       { key: 'startAttackTime', label: 'Start Attack Time', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
@@ -840,6 +845,7 @@ const GalaxyForm: React.FC = () => {
       { key: 'defenceIntervalTime', label: 'Defence Interval Time', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'stopDefenceTime', label: 'Stop Defence Time', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
+      { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' },
     ];
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
