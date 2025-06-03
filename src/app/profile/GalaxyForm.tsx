@@ -65,6 +65,8 @@ const GalaxyForm: React.FC = () => {
   const [showNotificationBell, setShowNotificationBell] = useState<boolean>(false);
   const [newFeaturesMessage, setNewFeaturesMessage] = useState<string>('');
   const [showNewFeaturesPopup, setShowNewFeaturesPopup] = useState<boolean>(false);
+  const [showLoadingBar, setShowLoadingBar] = useState<boolean>(false);
+  const [loadingBarProgress, setLoadingBarProgress] = useState<number>(0);
   const [showProfilePopup, setShowProfilePopup] = useState<boolean>(false);
 
   const findRunIdTimerRef = useRef<number | null>(null);
@@ -590,6 +592,7 @@ const GalaxyForm: React.FC = () => {
 
   const pollRunStatus = useCallback((runIdToPoll: number) => {
     setDeploymentStatus(`Monitoring run ID: ${runIdToPoll}. Waiting for status updates...`);
+    setLoadingBarProgress(40); // Update progress
     const pollingTimeout = 3 * 60 * 1000;
     const pollIntervalTime = 10 * 1000;
     const statusPollStartTime = Date.now();
@@ -602,6 +605,7 @@ const GalaxyForm: React.FC = () => {
         setIsDeployed(false);
         setIsPollingStatus(false);
         setRedeployMode(true);
+        setShowLoadingBar(false); // Hide on timeout
         return;
       }
       try {
@@ -613,6 +617,7 @@ const GalaxyForm: React.FC = () => {
           setIsPollingStatus(false);
           setIsDeployed(false);
           setRedeployMode(true);
+          setShowLoadingBar(false); // Hide on error
           return;
         }
         const runDetails = await runStatusResponse.json();
@@ -621,6 +626,7 @@ const GalaxyForm: React.FC = () => {
           statusPollTimerRef.current = null;
           setIsDeployed(true);
           setRedeployMode(false);
+          setLoadingBarProgress(70); // Update progress
           try {
             const setActiveRunResponse = await fetch('/api/auth/set-active-run', {
               method: 'POST',
@@ -641,6 +647,7 @@ const GalaxyForm: React.FC = () => {
             currentProgress += 1;
             const percent = Math.min(100, (currentProgress / totalDuration) * 100);
             setActivationProgressPercent(percent);
+            setLoadingBarProgress(70 + (percent * 0.3)); // Progress from 70 to 100
             if (currentProgress >= totalDuration) {
               window.clearInterval(newActivationTimerId);
               setActivationProgressTimerId(null);
@@ -648,6 +655,8 @@ const GalaxyForm: React.FC = () => {
               setIsPollingStatus(false);
               setActivationProgressPercent(100);
               setDeploymentStatus('KickLock activated successfully!');
+              setShowLoadingBar(false); // Hide on completion
+              setLoadingBarProgress(100); // Ensure 100%
             }
           }, 1000);
           setActivationProgressTimerId(newActivationTimerId);
@@ -658,6 +667,7 @@ const GalaxyForm: React.FC = () => {
           setIsDeployed(false);
           setIsPollingStatus(false);
           setRedeployMode(true);
+          setShowLoadingBar(false); // Hide if not in_progress
         }
       } catch (pollError) {
         if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
@@ -666,10 +676,11 @@ const GalaxyForm: React.FC = () => {
         setIsDeployed(false);
         setIsPollingStatus(false);
         setRedeployMode(true);
+        setShowLoadingBar(false); // Hide on error
       }
     };
     statusPollTimerRef.current = window.setTimeout(performStatusPoll, 0);
-  }, [setDeploymentStatus, setIsDeployed, setRedeployMode, setIsPollingStatus, setActivationProgressPercent, setActivationProgressTimerId, setShowDeployPopup]);
+  }, [setDeploymentStatus, setIsDeployed, setRedeployMode, setIsPollingStatus, setActivationProgressPercent, setActivationProgressTimerId, setShowDeployPopup, setShowLoadingBar, setLoadingBarProgress]);
 
   const startDeploymentCheck = useCallback(async (suffixedUsernameForJobSearch: string | null) => {
     if (!suffixedUsernameForJobSearch) {
@@ -747,6 +758,8 @@ const GalaxyForm: React.FC = () => {
     setRedeployMode(false);
     setShowDeployPopup(true);
     setDeploymentStatus('Dispatching workflow...');
+    setShowLoadingBar(true); // Show loading bar
+    setLoadingBarProgress(0); // Reset progress
     const authHeaders = getApiAuthHeaders();
     try {
       const response = await fetch(`/git/galaxyapi/workflow-dispatch`, {
@@ -759,12 +772,14 @@ const GalaxyForm: React.FC = () => {
         setDeploymentStatus('Waiting 10s for run to initialize...');
         setIsPollingStatus(true);
         setShowDeployPopup(true);
+        setLoadingBarProgress(20); // Initial progress
         window.setTimeout(() => {
           if (username) startDeploymentCheck(username);
           else {
             setDeploymentStatus("Error: User details not loaded.");
             setIsPollingStatus(false);
             setRedeployMode(true);
+            setShowLoadingBar(false); // Hide on error
           }
         }, 10000);
       } else {
@@ -773,6 +788,7 @@ const GalaxyForm: React.FC = () => {
         setIsDeployed(false);
         setIsPollingStatus(false);
         setRedeployMode(true);
+        setShowLoadingBar(false); // Hide on error
       }
     } catch (error) {
       setIsDeploying(false);
@@ -780,8 +796,9 @@ const GalaxyForm: React.FC = () => {
       setIsDeployed(false);
       setIsPollingStatus(false);
       setRedeployMode(true);
+      setShowLoadingBar(false); // Hide on error
     }
-  }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, showTokenExpiredPopup, setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed]);
+  }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, showTokenExpiredPopup, setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed, setShowLoadingBar, setLoadingBarProgress]);
 
   const saveAllFormDataToLocalStorage = useCallback(() => {
     if (typeof window !== 'undefined' && username) {
@@ -848,6 +865,13 @@ const GalaxyForm: React.FC = () => {
       setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
       return;
     }
+
+    if (showLoadingBar) {
+      setToastMessage("Please wait until the progressing bar gets disappear.");
+      setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+      return;
+    }
+
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError([]);
     const authHeaders = getApiAuthHeaders();
@@ -1121,7 +1145,7 @@ const GalaxyForm: React.FC = () => {
                 boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
               }}
             >
-              Reach out to GalaxyKickLock
+              For any query or suggestions, please contact GalaxyKickLock
             </div>
           )}
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
@@ -1129,6 +1153,11 @@ const GalaxyForm: React.FC = () => {
             <span>Logout</span>
           </button>
         </div>
+        {showLoadingBar && (
+          <div className={styles.headerBottomLoadingBarContainer}>
+            <div className={styles.loadingBar} style={{ width: `${loadingBarProgress}%` }}></div>
+          </div>
+        )}
       </div>
       <div className={styles.mainContent}>
         <div className={styles.formContainer}>
