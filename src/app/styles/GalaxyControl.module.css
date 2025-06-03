@@ -1,70 +1,272 @@
 /* Local variables - using regular classes instead of :root */
 .container {
-  --primary-color: #d32f2f;
-  --secondary-color: #b71c1c;
-  --background-dark: rgba(25, 0, 0, 0.7);
+  --primary-color: #e74c3c; /* Updated primary color to a more vibrant red */
+  --secondary-color: #c0392b; /* Darker red for secondary */
+  --background-dark: #121212; /* Darker overall background */
   --foreground: #ffffff;
-  --input-border: rgba(255, 0, 0, 0.3);
-  --input-border-focus: rgba(255, 0, 0, 0.6);
+  --input-border: #444; /* Softer input border */
+  --input-border-focus: #e74c3c; /* Red border on focus */
   
   position: relative;
   width: 100%;
-  min-height: 100vh;
-  overflow: hidden;
+  min-height: 100vh; /* Make container full height */
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2rem 1rem;
+  padding: 0;
   z-index: 1;
-  background-color: #000000;
+  background-color: var(--background-dark);
   isolation: isolate;
   box-sizing: border-box;
   margin: 0;
   border: none;
+  font-family: var(--font-orbitron), sans-serif; /* Apply Orbitron as the main font */
+  font-size: 0.9rem; /* Slightly increased base font size for readability */
 }
 
-.title {
-  font-size: 3rem;
-  font-weight: bold;
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Keep space-between for title centering */
+  align-items: center; /* Vertically center items */
+  padding: 8px 16px; /* Reduced padding */
+  background-color: #1a1a1a;
+  position: fixed;
+  top: 0;
+  display: flex; /* Ensure flexbox is enabled */
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 50px; /* Reduced header height */
+  box-sizing: border-box;
+  border-bottom: 1px solid #333;
+}
+
+.profileButton {
+  background: none;
+  border: none;
   color: white;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 30px; /* Adjust size as needed */
+  height: 30px; /* Adjust size as needed */
+  transition: background-color 0.3s ease;
+}
+
+.profileButton:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.usernameDisplay {
+  color: #fff;
+  font-size: 1.0rem; /* Slightly increased font size for readability */
+  margin-left: 5px;
+}
+
+.mainContent {
+  display: flex;
+  flex: 1;
+  margin-top: 50px; /* Adjusted to clear the fixed header */
+  padding: 0;
+  gap: 8px;
+  width: 100%;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  align-items: stretch;
+  flex-direction: row;
+  height: calc(100vh - 80px); /* Explicitly set height: 100vh - header height (50px) - footer height (30px) */
+}
+
+.logsTitle {
+  color: #fff;
+  margin-bottom: 8px; /* Reduced margin */
+  font-size: 0.9rem; /* Reduced font size */
+  border-bottom: 1px solid #333;
+  padding-bottom: 4px; /* Reduced padding */
+}
+
+.logContent {
+  color: #ccc;
+  font-size: 0.7rem; /* Reduced font size */
+  line-height: 1.3;
+  flex: 1; /* Allow it to grow and fill available space */
+  overflow-y: auto; /* Ensure content inside is scrollable if it overflows */
+}
+
+.toastMessage {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #f87171; /* Default to error color */
+  color: white;
+  padding: 12px 20px;
+  border-radius: 6px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.toastMessage.success {
+  background-color: #2ecc71;
+}
+
+.toastMessage.info {
+  background-color: #3498db;
+}
+
+.toastCloseButton {
+  background: none;
+  border: none;
+  color: white;
+  margin-left: 15px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.popupOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.popupContent {
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  padding: 20px;
+  width: 350px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border: 1px solid #333;
   text-align: center;
-  margin-bottom: 2.5rem;
-  text-shadow: 0 0 10px #d32f2f;
-  letter-spacing: 2px;
+}
+
+.popupTitle {
+  color: #fff;
+  margin-bottom: 15px;
+}
+
+.popupMessage {
+  color: #fff; /* Changed to white for better readability */
+  margin-bottom: 10px;
+  font-size: 1.0rem; /* Slightly increased font size for readability */
+  min-height: 20px;
+}
+
+.progressBarContainer {
+  margin-bottom: 20px;
+  width: 100%;
+  background-color: #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 10px;
+  background-color: #22c55e;
+  transition: width 0.5s ease-in-out;
+}
+
+.popupActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.popupActionButton {
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: none;
+  background-color: #e67e22;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 1;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.popupActionButton:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.activeDeploymentText {
+  color: #22c55e;
+}
+
+.popupCloseButton {
+  margin-top: 15px;
+  background: none;
+  border: 1px solid #555;
+  color: #aaa;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+
+.footer {
+  height: 30px; /* Reduced footer height */
+  background-color: #121212;
+  width: 100%;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+  font-size: 0.8rem;
+  border-top: 1px solid #333;
 }
 
 .kickLock {
-  color: #d32f2f;
-  font-family: 'Bungee', cursive;
+  color: #e74c3c; /* Red color for Kick Lock text */
+  font-family: var(--font-bungee), cursive; /* Apply Bungee for the Kick Lock title */
   font-weight: 400;
   position: relative;
   display: inline-block;
 }
 
+.title {
+  font-size: 2.5rem;
+  text-align: center;
+}
+
 .formContainer {
   width: 100%;
-  max-width: 800px;
-  margin-bottom: 1.5rem;
-  background: rgba(10, 10, 10, 0.85);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 0, 0, 0.3);
-  border: 1px solid rgba(255, 0, 0, 0.5);
+  max-width: 75%;
+  background: #1a1a1a; /* Solid background */
+  border-radius: 6px; /* Slightly smaller border-radius */
+  padding: 0.75rem; /* Reduced padding */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); /* Adjusted shadow */
+  border: 1px solid #e74c3c; /* Red border */
   transition: all 0.3s ease;
   position: relative;
+  overflow-y: hidden; /* Prevent vertical scrolling within the form container */
+  height: 100%; /* Make it take full height of mainContent */
+  box-sizing: border-box; /* Include padding in height calculation */
 }
 
-.formContainer:hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 0, 0, 0.6);
-  transform: translateY(-5px);
-}
 
+/* Header - Logout Button Styling */
 .logoutButton {
-  position: fixed !important;
-  top: 20px !important;
-  right: 20px !important;
+  position: relative !important; /* Adjust positioning */
+  top: auto !important;
+  right: auto !important;
+  order: 3; /* Push to the end */
+  margin-left: auto; /* Push to the right */
   background: linear-gradient(135deg, #d32f2f, #b71c1c);
   transition: all 0.3s ease;
   z-index: 1000;
@@ -78,11 +280,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px; /* Reduced gap */
   color: white;
   margin: 0;
   left: auto;
   bottom: auto;
+  font-size: 0.8rem; /* Reduced font size */
 }
 
 .logoutButton:hover {
@@ -101,47 +304,51 @@
 /* Tab styles */
 .tabsContainer {
   display: flex;
-  justify-content: space-between;
-  padding-left: 2rem;
-  padding-right: 2rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(255, 0, 0, 0.2);
-  padding-bottom: 0.5rem;
+  justify-content: flex-start; /* Align tabs to the start */
+  margin-bottom: 0.75rem; /* Reduced margin */
+  border-bottom: 1px solid #333; /* Darker border */
+  padding-bottom: 0; /* No padding at the bottom */
+  gap: 8px; /* Small gap between tabs */
 }
 
 .tabButton {
-  background: rgba(0, 0, 0, 0.6);
-  color: rgba(255, 255, 255, 0.7);
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 8px 8px 0 0;
+  background: #2a2a2a; /* Darker background for inactive tabs */
+  color: #aaa; /* Lighter text for inactive tabs */
+  border: 1px solid #333; /* Border for tabs */
+  border-bottom: none; /* No bottom border as it's handled by container */
+  padding: 0.75rem 1.2rem; /* Adjusted padding */
+  border-radius: 4px 4px 0 0; /* Smaller border-radius */
   cursor: pointer;
   transition: all 0.3s ease;
   font-weight: 500;
   position: relative;
   overflow: hidden;
-  border-bottom: 1px solid rgba(255, 0, 0, 0.5);
+  font-size: 0.8rem; /* Reduced font size */
+  margin-right: 0;
+  flex-grow: 1; /* Allow tabs to grow and fill space */
+  padding: 0.85rem 1.5rem; /* Slightly increased padding */
 }
 
 .tabButton:hover {
-  background: rgba(255, 0, 0, 0.1);
+  background: #3a3a3a; /* Slightly lighter on hover */
   color: white;
 }
 
 .activeTab {
-  background: #d32f2f;
+  background: #e74c3c; /* Red for active tab */
   color: #ffffff;
-  box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+  box-shadow: 0 0 10px rgba(231, 76, 60, 0.5); /* Red glow for active tab */
+  border-color: #e74c3c; /* Red border for active tab */
 }
 
 .activeTab::after {
   content: '';
   position: absolute;
-  bottom: 0;
+  bottom: -1px; /* Overlap with the container's border */
   left: 0;
   width: 100%;
   height: 2px;
-  background: linear-gradient(to right, #d32f2f, #b71c1c);
+  background: #e74c3c; /* Solid red line */
 }
 
 .formContent {
@@ -155,19 +362,30 @@
 
 .form {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  max-width: 900px;
+  grid-template-columns: repeat(3, 1fr); /* Three columns */
+  gap: 0.4rem; /* Further reduced gap for tighter spacing */
+  max-width: 100%; /* Allow form to take full width of its container */
   margin: 0 auto;
-  padding: 1rem;
-}
+  padding: 0.75rem; /* Slightly reduced padding */
+  box-sizing: border-box;
+  }
 
 .buttonGroup {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  margin-top: 1rem;
+ grid-column: 1 / -1; /* Span across all columns */
+ display: flex;
+ justify-content: space-around; /* Distribute space evenly */
+ gap: 12px; /* Increased gap between buttons */
+ margin-top: 0.75rem; /* Adjusted margin-top */
+ padding-top: 0.75rem; /* Add padding to separate from inputs */
+ border-top: 1px solid rgba(255, 0, 0, 0.2); /* Separator line */
+}
+
+.form > div {
+ margin-bottom: 0.15rem; /* Further reduced margin between form elements */
+}
+
+.formContainer {
+ /* Removed padding-bottom from formContainer as height and overflow-y handle it */
 }
 
 @media (max-width: 768px) {
@@ -205,25 +423,25 @@
 /* CRITICAL FIX - Enhanced input styling to prevent autofill color issues */
 .input {
   padding: 0.75rem 1rem;
-  background-color: rgba(25, 0, 0, 0.7) !important;
-  border: 1px solid rgba(255, 0, 0, 0.3);
-  border-radius: 8px;
+  background-color: #2a2a2a !important; /* Darker background for inputs */
+  border: 1px solid #444 !important; /* Softer border */
+  border-radius: 4px; /* Slightly smaller border-radius */
   color: white !important;
   font-size: 0.9rem;
   transition: all 0.3s;
   width: 100%;
   -webkit-text-fill-color: white !important;
-  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
-  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important; /* Adjusted for new background */
+  box-shadow: 0 0 0 1000px #2a2a2a inset !important; /* Adjusted for new background */
   caret-color: white !important;
 }
 
 .input:focus {
   outline: none !important;
-  border-color: rgba(255, 0, 0, 0.6) !important;
-  background-color: rgba(25, 0, 0, 0.7) !important;
-  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
-  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  border-color: #e74c3c !important; /* Red border on focus */
+  background-color: #2a2a2a !important;
+  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
+  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
 }
 
 .input::placeholder {
@@ -233,20 +451,20 @@
 
 /* Handle autofill specifically */
 .input:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
   -webkit-text-fill-color: white !important;
-  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
-  background-color: rgba(25, 0, 0, 0.7) !important;
+  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
+  background-color: #2a2a2a !important;
   color: white !important;
 }
 
 .input:-webkit-autofill:hover,
 .input:-webkit-autofill:focus,
 .input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
   -webkit-text-fill-color: white !important;
-  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
-  background-color: rgba(25, 0, 0, 0.7) !important;
+  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
+  background-color: #2a2a2a !important;
   color: white !important;
   background-image: none !important;
   transition-property: background-color, box-shadow !important;
@@ -256,9 +474,9 @@
 /* Force override browser's native styling */
 .input[type="text"],
 .input[type="text"]:focus {
-  background-color: rgba(25, 0, 0, 0.7) !important;
-  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
-  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  background-color: #2a2a2a !important;
+  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
+  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
 }
 
 .timeInput {
@@ -273,10 +491,9 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: #d32f2f;
   color: #ffffff;
   border: none;
-  border-radius: 8px;
+  border-radius: 4px; /* Slightly smaller border-radius */
   cursor: pointer;
   transition: all 0.3s;
   font-weight: 500;
@@ -284,11 +501,30 @@
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 0, 0, 0.2);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  min-width: 100px;
+  min-width: 120px; /* Make buttons slightly larger */
+  flex-grow: 1; /* Allow buttons to grow and fill space */
+}
+
+/* Specific Button Colors */
+.button[data-action="start"] {
+  background-color: #e74c3c; /* Red */
+}
+
+.button[data-action="stop"] {
+  background-color: #555; /* Gray */
+}
+
+.button[data-action="update"] {
+  background-color: #e67e22; /* Orange */
+}
+
+.button[data-action="deploy"],
+.button[data-action="deployed"] {
+  background-color: #22c55e; /* Green */
 }
 
 .button:hover {
-  background: #b71c1c;
+  background: #c0392b; /* Darker red on hover */
 }
 
 .button::before {
@@ -349,6 +585,17 @@
   background-color: #3b82f6 !important;
 }
 
+/* Blinking animation for the notification bell */
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.blinkingBell {
+  animation: blink 1s infinite;
+}
+
 @keyframes loading {
   from {
     transform: translateX(-100%);
@@ -360,12 +607,25 @@
 
 /* Override styles for Firefox if needed */
 .firefoxOverride.input {
-  background-color: rgba(25, 0, 0, 0.7) !important;
+  background-color: #2a2a2a !important;
   color: white !important;
 }
 
 /* Additional specificity for browser overrides */
 .webkitOverride.input,
 .webkitOverride.input:focus {
-  background-color: rgba(25, 0, 0, 0.7) !important;
+  background-color: #2a2a2a !important;
+}
+
+/* Logs Container Styling */
+.logsContainer {
+  background-color: #1a1a1a;
+  border: 1px solid #e74c3c; /* Red border */
+  border-radius: 8px;
+  padding: 10px; /* Reduced padding */
+  min-width: 550px;
+  height: 100%; /* Make it take full height of mainContent */
+  overflow-y: auto;
+  display: flex; /* Make it a flex container */
+  flex-direction: column; /* Arrange children in a column */
 }
