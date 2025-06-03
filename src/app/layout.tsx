@@ -1,6 +1,7 @@
 "use client";
 
 import type { Metadata } from "next";
+import { Orbitron, Bungee } from 'next/font/google'; // Import Orbitron and Bungee from Google Fonts
 import localFont from "next/font/local";
 import "./globals.css";
 import { useState, useEffect, useCallback } from "react";
@@ -11,6 +12,18 @@ import { createClient } from '@supabase/supabase-js'; // Import Supabase client
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const orbitron = Orbitron({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-orbitron',
+});
+
+const bungee = Bungee({
+  subsets: ['latin'],
+  weight: ['400'],
+  variable: '--font-bungee',
+});
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -202,7 +215,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${bungee.variable} antialiased`}
       >
         <ToastContainer />
         {children}

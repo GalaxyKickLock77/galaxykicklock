@@ -1,5 +1,6 @@
+"use client";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Square, RefreshCw, LogOut, CheckCircle, X } from 'lucide-react';
+import { Play, Square, RefreshCw, LogOut, CheckCircle, X, MessageSquare, Bell, UserCircle } from 'lucide-react';
 import styles from '../styles/GalaxyControl.module.css';
 import { useRouter } from 'next/navigation';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -7,12 +8,18 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 type FormData = {
   RC1: string;
   RC2: string;
-  startAttackTime: string;
-  stopAttackTime: string;
-  attackIntervalTime: string;
-  startDefenceTime: string;
-  stopDefenceTime: string;
-  defenceIntervalTime: string;
+  RC1_startAttackTime: string;
+  RC1_stopAttackTime: string;
+  RC1_attackIntervalTime: string;
+  RC1_startDefenceTime: string;
+  RC1_stopDefenceTime: string;
+  RC1_defenceIntervalTime: string;
+  RC2_startAttackTime: string;
+  RC2_attackIntervalTime: string;
+  RC2_stopAttackTime: string;
+  RC2_startDefenceTime: string;
+  RC2_defenceIntervalTime: string;
+  RC2_stopDefenceTime: string;
   PlanetName: string;
   Rival: string;
   standOnEnemy: boolean;
@@ -54,6 +61,11 @@ const GalaxyForm: React.FC = () => {
   const [showTokenExpiredPopup, setShowTokenExpiredPopup] = useState<boolean>(false);
   const [tokenExpiryDisplay, setTokenExpiryDisplay] = useState<string | null>(null);
   const [currentUserIdState, setCurrentUserIdState] = useState<string | null>(null);
+  const [showDiscordTooltip, setShowDiscordTooltip] = useState<boolean>(false);
+  const [showNotificationBell, setShowNotificationBell] = useState<boolean>(false);
+  const [newFeaturesMessage, setNewFeaturesMessage] = useState<string>('');
+  const [showNewFeaturesPopup, setShowNewFeaturesPopup] = useState<boolean>(false);
+  const [showProfilePopup, setShowProfilePopup] = useState<boolean>(false);
 
   const findRunIdTimerRef = useRef<number | null>(null);
   const statusPollTimerRef = useRef<number | null>(null);
@@ -75,41 +87,34 @@ const GalaxyForm: React.FC = () => {
   const formNames = { 1: 'Kick 1', 2: 'Kick 2', 3: 'Kick 3', 4: 'Kick 4', 5: 'Kick 5' };
 
   // Initialize formData states with a function that attempts to load from local storage
-  const getInitialFormData = (formNum: number): FormData => {
-    if (typeof window !== 'undefined') {
-      const savedData = localStorage.getItem(STORAGE_KEYS.FORMS_DATA);
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData);
-          if (parsedData[`formData${formNum}`]) {
-            return parsedData[`formData${formNum}`];
-          }
-        } catch (e) {
-          console.error("Failed to parse form data from local storage", e);
-        }
-      }
-    }
+  const getInitialFormData = (): FormData => {
     return {
       RC1: '',
       RC2: '',
-      startAttackTime: '',
-      stopAttackTime: '',
-      attackIntervalTime: '',
-      startDefenceTime: '',
-      stopDefenceTime: '',
-      defenceIntervalTime: '',
+      RC1_startAttackTime: '',
+      RC1_stopAttackTime: '',
+      RC1_attackIntervalTime: '',
+      RC1_startDefenceTime: '',
+      RC1_stopDefenceTime: '',
+      RC1_defenceIntervalTime: '',
       PlanetName: '',
       Rival: '',
+      RC2_startAttackTime: '',
+      RC2_attackIntervalTime: '',
+      RC2_stopAttackTime: '',
+      RC2_startDefenceTime: '',
+      RC2_defenceIntervalTime: '',
+      RC2_stopDefenceTime: '',
       standOnEnemy: false,
       actionOnEnemy: false
     };
   };
 
-  const [formData1, setFormData1] = useState<FormData>(getInitialFormData(1));
-  const [formData2, setFormData2] = useState<FormData>(getInitialFormData(2));
-  const [formData3, setFormData3] = useState<FormData>(getInitialFormData(3));
-  const [formData4, setFormData4] = useState<FormData>(getInitialFormData(4));
-  const [formData5, setFormData5] = useState<FormData>(getInitialFormData(5));
+  const [formData1, setFormData1] = useState<FormData>(getInitialFormData());
+  const [formData2, setFormData2] = useState<FormData>(getInitialFormData());
+  const [formData3, setFormData3] = useState<FormData>(getInitialFormData());
+  const [formData4, setFormData4] = useState<FormData>(getInitialFormData());
+  const [formData5, setFormData5] = useState<FormData>(getInitialFormData());
 
   const [buttonStates1, setButtonStates1] = useState<ButtonStates>(initialButtonStates);
   const [buttonStates2, setButtonStates2] = useState<ButtonStates>(initialButtonStates);
@@ -123,71 +128,78 @@ const GalaxyForm: React.FC = () => {
   const [error4, setError4] = useState<string[]>([]);
   const [error5, setError5] = useState<string[]>([]);
 
-  const pollForCancelledStatus = useCallback(async (runId: number) => {
-    const pollTimeout = 60 * 1000;
-    const pollInterval = 5 * 1000;
-    const startTime = Date.now();
-    const authHeaders = getApiAuthHeaders();
-    const check = async () => {
-      if (Date.now() - startTime > pollTimeout) {
-        if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
-        cancelPollTimerRef.current = null;
-        setDeploymentStatus('Timed out waiting for cancellation confirmation.');
-        setIsUndeploying(false);
-        setIsPollingStatus(false);
-        setIsDeployed(false);
-        setRedeployMode(true);
-        setShowDeployPopup(true);
-        return;
-      }
-      try {
-        const response = await fetch(`/git/galaxyapi/runs?runId=${runId}`, { headers: authHeaders });
-        if (!response.ok) {
+  const pollForCancelledStatus = useCallback(async (runId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const pollTimeout = 60 * 1000;
+      const pollInterval = 5 * 1000;
+      const startTime = Date.now();
+      const authHeaders = getApiAuthHeaders();
+      const check = async () => {
+        if (Date.now() - startTime > pollTimeout) {
           if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
           cancelPollTimerRef.current = null;
-          setDeploymentStatus(`Error fetching run status during undeploy. ${await response.text()}`);
+          setDeploymentStatus('Timed out waiting for cancellation confirmation.');
           setIsUndeploying(false);
           setIsPollingStatus(false);
           setIsDeployed(false);
           setRedeployMode(true);
           setShowDeployPopup(true);
+          resolve();
           return;
         }
-        const runDetails = await response.json();
-        if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
+        try {
+          const response = await fetch(`/git/galaxyapi/runs?runId=${runId}`, { headers: authHeaders });
+          if (!response.ok) {
+            if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+            cancelPollTimerRef.current = null;
+            setDeploymentStatus(`Error fetching run status during undeploy. ${await response.text()}`);
+            setIsUndeploying(false);
+            setIsPollingStatus(false);
+            setIsDeployed(false);
+            setRedeployMode(true);
+            setShowDeployPopup(true);
+            reject(new Error('Error fetching run status during undeploy.'));
+            return;
+          }
+          const runDetails = await response.json();
+          if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
+            if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+            cancelPollTimerRef.current = null;
+            setDeploymentStatus('Deployment successfully cancelled.');
+            setIsDeployed(false);
+            setIsUndeploying(false);
+            setIsPollingStatus(false);
+            setShowDeployPopup(true);
+            setRedeployMode(true);
+            resolve();
+          } else if (runDetails.status === 'completed') {
+            if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+            cancelPollTimerRef.current = null;
+            setDeploymentStatus(`Undeploy failed: Workflow completed (${runDetails.conclusion}), not cancelled.`);
+            setIsUndeploying(false);
+            setIsPollingStatus(false);
+            setIsDeployed(false);
+            setRedeployMode(true);
+            setShowDeployPopup(true);
+            reject(new Error('Undeploy failed: Workflow completed, not cancelled.'));
+          } else {
+            setDeploymentStatus(`Waiting for cancellation... Current status: ${runDetails.status}`);
+            cancelPollTimerRef.current = window.setTimeout(check, pollInterval);
+          }
+        } catch (error) {
           if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
           cancelPollTimerRef.current = null;
-          setDeploymentStatus('Deployment successfully cancelled.');
-          setIsDeployed(false);
-          setIsUndeploying(false);
-          setIsPollingStatus(false);
-          setShowDeployPopup(true);
-          setRedeployMode(true);
-        } else if (runDetails.status === 'completed') {
-          if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
-          cancelPollTimerRef.current = null;
-          setDeploymentStatus(`Undeploy failed: Workflow completed (${runDetails.conclusion}), not cancelled.`);
+          setDeploymentStatus('Error checking cancellation status.');
           setIsUndeploying(false);
           setIsPollingStatus(false);
           setIsDeployed(false);
           setRedeployMode(true);
           setShowDeployPopup(true);
-        } else {
-          setDeploymentStatus(`Waiting for cancellation... Current status: ${runDetails.status}`);
-          cancelPollTimerRef.current = window.setTimeout(check, pollInterval);
+          reject(error);
         }
-      } catch (error) {
-        if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
-        cancelPollTimerRef.current = null;
-        setDeploymentStatus('Error checking cancellation status.');
-        setIsUndeploying(false);
-        setIsPollingStatus(false);
-        setIsDeployed(false);
-        setRedeployMode(true);
-        setShowDeployPopup(true);
-      }
-    };
-    cancelPollTimerRef.current = window.setTimeout(check, 0);
+      };
+      cancelPollTimerRef.current = window.setTimeout(check, 0);
+    });
   }, [setDeploymentStatus, setIsDeployed, setIsUndeploying, setIsPollingStatus, setRedeployMode, setShowDeployPopup]);
 
   const handleUndeploy = useCallback(async () => {
@@ -278,7 +290,7 @@ const GalaxyForm: React.FC = () => {
           const cancelResponse = await fetch(`/git/galaxyapi/runs?cancelRunId=${runIdToCancel}`, { method: 'POST', headers: authHeaders });
           if (cancelResponse.status === 202) {
             setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
-            pollForCancelledStatus(runIdToCancel);
+            await pollForCancelledStatus(runIdToCancel); // Await the polling
           } else {
             throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${(await cancelResponse.json().catch(() => ({}))).message || await cancelResponse.text()}`);
           }
@@ -473,7 +485,46 @@ const GalaxyForm: React.FC = () => {
 
   useEffect(() => {
     setIsClient(true);
+    // Simulate new features being added after a delay
+    const timer = setTimeout(() => {
+      setShowNotificationBell(true);
+      setNewFeaturesMessage('Exciting new features have been added! Check them out now!');
+    }, 5000); // Show notification after 5 seconds for demonstration
+
+    return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isClient || !username) return;
+
+    const userSpecificKey = `${STORAGE_KEYS.FORMS_DATA}_${username}`;
+    const savedData = localStorage.getItem(userSpecificKey);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        setFormData1(prev => ({ ...prev, ...(parsedData.formData1 || getInitialFormData()) }));
+        setFormData2(prev => ({ ...prev, ...(parsedData.formData2 || getInitialFormData()) }));
+        setFormData3(prev => ({ ...prev, ...(parsedData.formData3 || getInitialFormData()) }));
+        setFormData4(prev => ({ ...prev, ...(parsedData.formData4 || getInitialFormData()) }));
+        setFormData5(prev => ({ ...prev, ...(parsedData.formData5 || getInitialFormData()) }));
+      } catch (e) {
+        console.error("Failed to parse form data from local storage", e);
+        // On error, reset to initial state to prevent issues
+        setFormData1(getInitialFormData());
+        setFormData2(getInitialFormData());
+        setFormData3(getInitialFormData());
+        setFormData4(getInitialFormData());
+        setFormData5(getInitialFormData());
+      }
+    } else {
+      // If no saved data for this user, ensure forms are reset to initial state
+      setFormData1(getInitialFormData());
+      setFormData2(getInitialFormData());
+      setFormData3(getInitialFormData());
+      setFormData4(getInitialFormData());
+      setFormData5(getInitialFormData());
+    }
+  }, [isClient, username]); // Depend on isClient and username
 
   useEffect(() => {
     if (!isClient) return;
@@ -733,7 +784,7 @@ const GalaxyForm: React.FC = () => {
   }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, showTokenExpiredPopup, setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed]);
 
   const saveAllFormDataToLocalStorage = useCallback(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && username) {
       const allFormData = {
         formData1,
         formData2,
@@ -741,13 +792,16 @@ const GalaxyForm: React.FC = () => {
         formData4,
         formData5,
       };
-      localStorage.setItem(STORAGE_KEYS.FORMS_DATA, JSON.stringify(allFormData));
+      const userSpecificKey = `${STORAGE_KEYS.FORMS_DATA}_${username}`;
+      localStorage.setItem(userSpecificKey, JSON.stringify(allFormData));
     }
-  }, [formData1, formData2, formData3, formData4, formData5]);
+  }, [formData1, formData2, formData3, formData4, formData5, username]);
 
   useEffect(() => {
-    saveAllFormDataToLocalStorage();
-  }, [formData1, formData2, formData3, formData4, formData5, saveAllFormDataToLocalStorage]);
+    if (username) { // Only save if username is available
+      saveAllFormDataToLocalStorage();
+    }
+  }, [formData1, formData2, formData3, formData4, formData5, saveAllFormDataToLocalStorage, username]);
 
   const handleInputChange = (formNumber: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -769,7 +823,24 @@ const GalaxyForm: React.FC = () => {
     const setButtonStates = formDataSetters[formNumber - 1];
     const setError = errorSetters[formNumber - 1];
     const formData = formDatas[formNumber - 1];
-    const requiredFields: (keyof FormData)[] = ['RC1', 'startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime', 'PlanetName', 'Rival'];
+    const requiredFields: (keyof FormData)[] = [
+      'RC1',
+      'RC2',
+      'RC1_startAttackTime',
+      'RC1_stopAttackTime',
+      'RC1_attackIntervalTime',
+      'RC1_startDefenceTime',
+      'RC1_stopDefenceTime',
+      'RC1_defenceIntervalTime',
+      'RC2_startAttackTime',
+      'RC2_stopAttackTime',
+      'RC2_attackIntervalTime',
+      'RC2_startDefenceTime',
+      'RC2_stopDefenceTime',
+      'RC2_defenceIntervalTime',
+      'PlanetName',
+      'Rival'
+    ];
     const emptyFields = requiredFields.filter(field => !formData[field]);
     if (emptyFields.length > 0) {
       setError(emptyFields);
@@ -834,27 +905,33 @@ const GalaxyForm: React.FC = () => {
     const currentButtonStates = [buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5][formNumber - 1];
     const currentError = [error1, error2, error3, error4, error5][formNumber - 1];
     const inputFields = [
-      { key: 'RC1', label: 'RC1', color: '#FFFF00', type: 'text' },
-      { key: 'RC2', label: 'RC2', color: '#FFFF00', type: 'text' },
-      { key: 'PlanetName', label: 'Planet Name', color: '#FFFFFF', type: 'text' },
-      { key: 'Rival', label: 'Rival', color: '#FFA500', type: 'text' },
-      { key: 'startAttackTime', label: 'Start Attack Time', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'attackIntervalTime', label: 'Attack Interval Time', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'stopAttackTime', label: 'Stop Attack Time', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'startDefenceTime', label: 'Start Defence Time', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'defenceIntervalTime', label: 'Defence Interval Time', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'stopDefenceTime', label: 'Stop Defence Time', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC1', label: 'RC1', placeholder: 'Enter RC1', color: '#FFFF00', type: 'text' },
+      { key: 'RC2', label: 'RC2', placeholder: 'Enter RC2', color: '#FFFF00', type: 'text' },
+      { key: 'PlanetName', label: 'Planet Name', placeholder: 'Enter Planet', color: '#FFFFFF', type: 'text' },
+      { key: 'RC1_startAttackTime', label: 'RC1 Start Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC1_attackIntervalTime', label: 'RC1 Attack Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC1_stopAttackTime', label: 'RC1 Stop Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC1_startDefenceTime', label: 'RC1 Start Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC1_defenceIntervalTime', label: 'RC1 Defence Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC1_stopDefenceTime', label: 'RC1 Stop Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC2_startAttackTime', label: 'RC2 Start Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC2_attackIntervalTime', label: 'RC2 Attack Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC2_stopAttackTime', label: 'RC2 Stop Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC2_startDefenceTime', label: 'RC2 Start Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC2_defenceIntervalTime', label: 'RC2 Defence Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'RC2_stopDefenceTime', label: 'RC2 Stop Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'Rival', label: 'Rival', placeholder: 'Enter Rival', color: '#FFA500', type: 'text' },
       { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
       { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' },
     ];
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
         <div className={styles.form}>
-          {inputFields.map(({ key, label, color, type, maxLength, className }) => (
-            <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'center' }}>{label}</label>
+          {inputFields.map(({ key, label, color, type, maxLength, className, placeholder }) => (
+            <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+              <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
               {type === 'checkbox' ? (
-                <div 
+                <div
                   onClick={() => {
                     const currentValue = currentFormData[key as keyof FormData] as boolean;
                     const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
@@ -865,10 +942,11 @@ const GalaxyForm: React.FC = () => {
                     width: '40px',
                     height: '24px',
                     borderRadius: '12px',
-                    backgroundColor: currentFormData[key as keyof FormData] ? '#22c55e' : '#ccc',
+                    backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444', /* Red for active, darker grey for inactive */
                     cursor: 'pointer',
                     position: 'relative',
                     transition: 'background-color 0.2s',
+                    marginTop: '5px'
                   }}
                 >
                   <div
@@ -895,9 +973,10 @@ const GalaxyForm: React.FC = () => {
                     maxLength={maxLength}
                     autoComplete="off"
                     onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                    placeholder={placeholder}
                     style={{
-                      backgroundColor: 'rgba(25, 0, 0, 0.7)',
-                      border: currentError.includes(key) ? '1px solid red' : '1px solid rgba(255, 0, 0, 0.3)',
+                      backgroundColor: '#2a2a2a', /* Darker background for inputs */
+                      border: currentError.includes(key) ? '1px solid red' : '1px solid #444', /* Red border for error, softer grey for normal */
                       color: '#fff',
                       WebkitTextFillColor: '#fff',
                       width: '100%',
@@ -910,13 +989,14 @@ const GalaxyForm: React.FC = () => {
               )}
             </div>
           ))}
-          <div className={styles.buttonGroup} style={{ gap: '20px', display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+          <div className={styles.buttonGroup}>
             <button
               type="button"
               onClick={() => handleAction(formNumber)('start')}
               className={`${styles.button} ${currentButtonStates.start.loading ? styles.loadingButton : ''} ${currentButtonStates.start.active ? styles.buttonRunning : ''}`}
               disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.start.loading || showTokenExpiredPopup}
-              style={{ backgroundColor: currentButtonStates.start.active ? '#22c55e' : undefined }}
+              style={{ backgroundColor: currentButtonStates.start.active ? '#22c55e' : '#e74c3c' }}
+              data-action="start"
             >
               <Play size={16} />
               <span>Start</span>
@@ -926,6 +1006,8 @@ const GalaxyForm: React.FC = () => {
               onClick={() => handleAction(formNumber)('stop')}
               className={`${styles.button} ${currentButtonStates.stop.loading ? styles.loadingButton : ''} ${currentButtonStates.stop.active ? styles.buttonStopped : ''}`}
               disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.stop.loading || showTokenExpiredPopup}
+              style={{ backgroundColor: currentButtonStates.stop.active ? '#dc2626' : '#444' }}
+              data-action="stop"
             >
               <Square size={16} />
               <span>Stop</span>
@@ -935,231 +1017,179 @@ const GalaxyForm: React.FC = () => {
               onClick={() => handleAction(formNumber)('update')}
               className={`${styles.button} ${currentButtonStates.update.loading ? styles.loadingButton : ''} ${currentButtonStates.update.active ? styles.buttonUpdated : ''}`}
               disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || currentButtonStates.update.loading || showTokenExpiredPopup}
-              style={{ backgroundColor: currentButtonStates.update.active ? '#3b82f6' : undefined }}
+              style={{ backgroundColor: currentButtonStates.update.active ? '#3b82f6' : '#e67e22' }}
+              data-action="update"
             >
               <RefreshCw size={16} />
               <span>Update</span>
             </button>
-            {renderStatusButton()}
+            <button
+              onClick={isDeployed ? handleUndeploy : handleDeploy}
+              disabled={isDeploying || isPollingStatus || showTokenExpiredPopup || (isDeployed && isUndeploying)}
+              className={`${styles.button}`}
+              style={{ minWidth: '120px', backgroundColor: isDeployed ? '#22c55e' : '#e74c3c', border: 'none' }}
+              data-action={isDeployed ? "deployed" : "deploy"}
+            >
+              {isDeployed ? (
+                isUndeploying ? (
+                  <>
+                    <RefreshCw size={16} />
+                    <span>Undeploying...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={16} />
+                    <span>Deployed</span>
+                  </>
+                )
+              ) : (
+                <>
+                  <RefreshCw size={16} />
+                  <span>Deploy</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
     );
   };
 
-  const renderStatusButton = () => {
-    if (isDeployed) {
-      return (
-        <button
-          onClick={handleUndeploy}
-          disabled={isUndeploying || showTokenExpiredPopup}
-          className={`${styles.button}`}
-          style={{ minWidth: '120px', backgroundColor: '#22c55e', border: 'none' }}
-        >
-          {isUndeploying ? (
-            <>
-              <RefreshCw size={16} />
-              <span>Undeploying...</span>
-            </>
-          ) : (
-            <>
-              <CheckCircle size={16} />
-              <span>Deployed</span>
-            </>
-          )}
-        </button>
-      );
-    } else {
-      return (
-        <button
-          onClick={() => setShowDeployPopup(true)}
-          disabled={showTokenExpiredPopup}
-          className={`${styles.button}`}
-          style={{ minWidth: '120px', backgroundColor: '#dc2626', border: 'none' }}
-        >
-          <RefreshCw size={16} />
-          <span>Deploy</span>
-        </button>
-      );
-    }
-  };
-
   return (
     <div className={styles.container}>
       {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            backgroundColor: toastMessage.includes("Redirecting") ? '#3498db' : (toastMessage.includes("Successfully") ? '#2ecc71' : '#f87171'),
-            color: 'white',
-            padding: '12px 20px',
-            borderRadius: '6px',
-            zIndex: 2000,
-            display: 'flex',
-            alignItems: 'center',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-          }}
-        >
+        <div className={styles.toastMessage}>
           <span>{toastMessage}</span>
-          <button
-            onClick={() => setToastMessage(null)}
-            style={{ background: 'none', border: 'none', color: 'white', marginLeft: '15px', cursor: 'pointer', fontSize: '18px', lineHeight: '1' }}
-          >
+          <button onClick={() => setToastMessage(null)} className={styles.toastCloseButton}>
             <X size={20} />
           </button>
         </div>
       )}
-      <div
-        className={styles.header}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 20px', /* Adjusted padding */
-          backgroundColor: '#1a1a1a',
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 1000,
-          height: '60px', /* Fixed height for the header */
-          boxSizing: 'border-box'
-        }}
-      >
-        {displayedUsername && (
-          <div style={{ color: '#fff', fontSize: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-              <span style={{ marginRight: '4px' }}>Welcome:</span>
-              <span>{displayedUsername}</span>
-            </div>
-            {tokenExpiryDisplay && (
-              <div style={{ fontSize: '0.85rem', color: '#ccc', marginTop: '2px' }}>
-                Token Expires: {tokenExpiryDisplay}
-              </div>
+      <div className={styles.header}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '5px' }}>
+          {displayedUsername && (
+            <button
+              onClick={() => setShowProfilePopup(true)}
+              className={styles.profileButton}
+              aria-label="User Profile"
+            >
+              <UserCircle size={24} />
+            </button>
+          )}
+          {displayedUsername && (
+            <span className={styles.usernameDisplay}>{displayedUsername}</span>
+          )}
+        </div>
+        <div style={{ flexGrow: 1, textAlign: 'center' }}>
+          <h1 className={styles.title}>
+            <span className={styles.kickLock}>KICK ~ LOCK</span>
+          </h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', position: 'relative' }}>
+          <button
+            onClick={() => setShowNewFeaturesPopup(true)}
+            className={`${styles.button} ${showNotificationBell ? styles.blinkingBell : ''}`}
+            style={{ backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px', borderRadius: '5px', border: 'none', cursor: 'pointer', position: 'relative', color: 'white' }}
+            aria-label="New Features"
+          >
+            <Bell size={14} />
+            {showNotificationBell && (
+              <span style={{ position: 'absolute', top: '-2px', right: '-2px', backgroundColor: 'red', borderRadius: '50%', width: '8px', height: '8px' }} />
             )}
-          </div>
-        )}
-        <h1 className={styles.title} style={{ margin: '0 auto', marginBottom: '-10px', marginRight: '600px',textAlign: 'center' }}> {/* Centered Kick Lock */}
-          <span className={styles.kickLock}>KICK ~ LOCK</span>
-        </h1>
-        <div>
+          </button>
+          <button
+            onClick={() => setShowDiscordTooltip(!showDiscordTooltip)}
+            className={`${styles.button}`}
+            style={{ backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px', borderRadius: '5px', border: 'none', cursor: 'pointer', color: 'white' }}
+            aria-label="Reach out on Discord"
+          >
+            <MessageSquare size={14} />
+          </button>
+          {showDiscordTooltip && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: '0',
+                marginTop: '5px',
+                backgroundColor: '#36393f',
+                color: '#fff',
+                padding: '8px 12px',
+                borderRadius: '5px',
+                whiteSpace: 'nowrap',
+                zIndex: 10,
+                boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+              }}
+            >
+              Reach out to GalaxyKickLock
+            </div>
+          )}
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
             <LogOut size={16} />
             <span>Logout</span>
           </button>
         </div>
       </div>
-      <div className={styles.formContainer} style={{ marginTop: '60px' }}> {/* Added margin-top to prevent content overlap */}
-        <div className={styles.tabsContainer}>
-          {[1, 2, 3, 4, 5].map(num => (
-            <button
-              key={num}
-              className={`${styles.tabButton} ${activeTab === num ? styles.activeTab : ''}`}
-              onClick={() => setActiveTab(num)}
-            >
-              {formNames[num as keyof typeof formNames]}
-            </button>
-          ))}
+      <div className={styles.mainContent}>
+        <div className={styles.formContainer}>
+          <div className={styles.tabsContainer}>
+            {[1, 2, 3, 4, 5].map(num => (
+              <button
+                key={num}
+                className={`${styles.tabButton} ${activeTab === num ? styles.activeTab : ''}`}
+                onClick={() => setActiveTab(num)}
+              >
+                {formNames[num as keyof typeof formNames]}
+              </button>
+            ))}
+          </div>
+          {renderForm(1)}
+          {renderForm(2)}
+          {renderForm(3)}
+          {renderForm(4)}
+          {renderForm(5)}
         </div>
-        {renderForm(1)}
-        {renderForm(2)}
-        {renderForm(3)}
-        {renderForm(4)}
-        {renderForm(5)}
+        <div className={styles.logsContainer}>
+          <h2 className={styles.logsTitle}>Logs Flow Details</h2>
+          <div className={styles.logContent}>
+
+          </div>
+        </div>
       </div>
       {showDeployPopup && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#1a1a1a',
-              borderRadius: '8px',
-              padding: '20px',
-              width: '350px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-              border: '1px solid #333',
-              textAlign: 'center'
-            }}
-          >
-            <h2 style={{ color: '#fff', marginBottom: '15px' }}>
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent}>
+            <h2 className={styles.popupTitle}>
               {isDeployed && isPollingStatus && activationProgressTimerId !== null
                 ? 'Activating KickLock'
                 : (isDeployed && !redeployMode && !isPollingStatus)
                 ? 'KickLock Active'
                 : 'Deploy KickLock'}
             </h2>
-            <p style={{ color: '#aaa', marginBottom: '10px', fontSize: '0.9rem', minHeight: '20px' }}>
+            <p className={styles.popupMessage}>
               {deploymentStatus}
             </p>
             {isDeployed && isPollingStatus && activationProgressTimerId !== null && (
-              <div
-                style={{
-                  marginBottom: '20px',
-                  width: '100%',
-                  backgroundColor: '#333',
-                  borderRadius: '4px',
-                  overflow: 'hidden'
-                }}
-              >
-                <div
-                  style={{
-                    width: `${activationProgressPercent}%`,
-                    height: '10px',
-                    backgroundColor: '#22c55e',
-                    transition: 'width 0.5s ease-in-out'
-                  }}
-                />
+              <div className={styles.progressBarContainer}>
+                <div className={styles.progressBar} style={{ width: `${activationProgressPercent}%` }} />
               </div>
             )}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                marginTop: (isDeployed && isPollingStatus && activationProgressTimerId !== null) ? '0' : '20px'
-              }}
-            >
+            <div className={styles.popupActions}>
               {redeployMode && !isDeploying && !isPollingStatus ? (
                 <button
                   onClick={handleDeploy}
                   disabled={isDeploying || isPollingStatus || showTokenExpiredPopup}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? '#555' : '#e67e22',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    cursor: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? 'not-allowed' : 'pointer',
-                    opacity: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? 0.7 : 1,
-                    transition: 'all 0.3s ease',
-                    width: '100%'
-                  }}
+                  className={styles.popupActionButton}
+                  style={{ backgroundColor: (isDeploying || isPollingStatus || showTokenExpiredPopup) ? '#555' : '#e67e22' }}
                 >
                   Redeploy Again
                 </button>
               ) : (isDeployed && !redeployMode && !isPollingStatus && activationProgressTimerId === null) ? (
-                <p style={{ color: '#22c55e' }}>Deployment is active!</p>
+                <p className={styles.activeDeploymentText}>Deployment is active!</p>
               ) : null}
             </div>
             {(!isDeploying && activationProgressTimerId === null && !showTokenExpiredPopup) && (
-              <button
-                onClick={() => setShowDeployPopup(false)}
-                style={{ marginTop: '15px', background: 'none', border: '1px solid #555', color: '#aaa', padding: '5px 10px', borderRadius: '4px' }}
-              >
+              <button onClick={() => setShowDeployPopup(false)} className={styles.popupCloseButton}>
                 Close
               </button>
             )}
@@ -1167,49 +1197,19 @@ const GalaxyForm: React.FC = () => {
         </div>
       )}
       {showThankYouMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#1a1a1a',
-              borderRadius: '8px',
-              padding: '20px',
-              width: '300px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-              border: '1px solid #333'
-            }}
-          >
-            <h2 style={{ color: '#fff', marginBottom: '20px', textAlign: 'center' }}>
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent}>
+            <h2 className={styles.popupTitle}>
               Thank You for using KickLock
             </h2>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div className={styles.popupActions}>
               <button
                 onClick={async () => {
                   setShowThankYouMessage(false);
                   await handleDeploy();
                 }}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: '#d32f2f',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  width: '100%'
-                }}
+                className={styles.popupActionButton}
+                style={{ backgroundColor: '#d32f2f' }}
               >
                 Deploy Again
               </button>
@@ -1218,39 +1218,15 @@ const GalaxyForm: React.FC = () => {
         </div>
       )}
       {showAutoUndeployPopup && autoUndeployMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1050
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#2a2a2a',
-              color: '#fff',
-              borderRadius: '8px',
-              padding: '30px',
-              width: '400px',
-              boxShadow: '0 5px 25px rgba(0, 0, 0, 0.6)',
-              border: '1px solid #444',
-              textAlign: 'center'
-            }}
-          >
-            <h2 style={{ color: '#f39c12', marginBottom: '15px', fontSize: '1.5rem' }}>
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '400px' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#f39c12' }}>
               Session Expired
             </h2>
-            <p style={{ color: '#ccc', marginBottom: '25px', fontSize: '1rem', lineHeight: '1.6' }}>
+            <p className={styles.popupMessage}>
               {autoUndeployMessage}
             </p>
-            <div style={{ display: 'flex', justifyContent: 'space-around', gap: '15px' }}>
+            <div className={styles.popupActions} style={{ justifyContent: 'space-around', gap: '15px' }}>
               <button
                 onClick={() => {
                   setShowAutoUndeployPopup(false);
@@ -1258,17 +1234,8 @@ const GalaxyForm: React.FC = () => {
                   setShowDeployPopup(true);
                   handleDeploy();
                 }}
-                style={{
-                  padding: '12px 25px',
-                  borderRadius: '5px',
-                  border: 'none',
-                  backgroundColor: '#e67e22',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  flex: 1,
-                  transition: 'background-color 0.3s ease'
-                }}
+                className={styles.popupActionButton}
+                style={{ backgroundColor: '#e67e22', flex: 1 }}
                 onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#d35400'}
                 onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#e67e22'}
               >
@@ -1280,16 +1247,8 @@ const GalaxyForm: React.FC = () => {
                   setAutoUndeployMessage(null);
                   setShowDeployPopup(true);
                 }}
-                style={{
-                  padding: '12px 25px',
-                  borderRadius: '5px',
-                  border: '1px solid #555',
-                  backgroundColor: '#444',
-                  color: '#ccc',
-                  cursor: 'pointer',
-                  flex: 1,
-                  transition: 'background-color 0.3s ease'
-                }}
+                className={styles.popupCloseButton}
+                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
                 onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
                 onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
               >
@@ -1300,43 +1259,68 @@ const GalaxyForm: React.FC = () => {
         </div>
       )}
       {showTokenExpiredPopup && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1060
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#2a2a2a',
-              color: '#fff',
-              borderRadius: '8px',
-              padding: '30px',
-              width: '400px',
-              boxShadow: '0 5px 25px rgba(0, 0, 0, 0.6)',
-              border: '1px solid #f39c12',
-              textAlign: 'center'
-            }}
-          >
-            <h2 style={{ color: '#f39c12', marginBottom: '15px', fontSize: '1.5rem' }}>
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '400px' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#f39c12' }}>
               Token Expired
             </h2>
-            <p style={{ color: '#ccc', marginBottom: '25px', fontSize: '1rem', lineHeight: '1.6' }}>
+            <p className={styles.popupMessage}>
               Your token has expired. Please renew it by reaching out to the Owner on Discord GalaxyKickLock.
             </p>
+          </div>
+        </div>
+      )}
+      {showNewFeaturesPopup && (
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '400px' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#2ecc71' }}>
+              New Features!
+            </h2>
+            <p className={styles.popupMessage}>
+              {newFeaturesMessage}
+            </p>
+            <div className={styles.popupActions}>
+              <button
+                onClick={() => {
+                  setShowNewFeaturesPopup(false);
+                  setShowNotificationBell(false); // Turn off blinking after user sees
+                }}
+                className={styles.popupCloseButton}
+                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showProfilePopup && (
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '300px' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#00FFFF' }}>
+              Profile Details
+            </h2>
+            <p className={styles.popupMessage}>
+              {tokenExpiryDisplay ? `Token Expires: ${tokenExpiryDisplay}` : 'Token expiry details not available.'}
+            </p>
+            <div className={styles.popupActions}>
+              <button
+                onClick={() => setShowProfilePopup(false)}
+                className={styles.popupCloseButton}
+                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
-
 export default GalaxyForm;
+
