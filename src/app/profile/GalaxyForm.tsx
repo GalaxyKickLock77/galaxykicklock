@@ -949,8 +949,9 @@ const GalaxyForm: React.FC = () => {
       { key: 'Rival', label: 'Rival', placeholder: 'Enter Rival', color: '#FFA500', type: 'text' },
       { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
       { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' }
-      // Removed aiChatToggle from here
+      // aiChatToggle removed from here
     ];
+
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
         <div className={styles.form}>
@@ -1082,8 +1083,11 @@ const GalaxyForm: React.FC = () => {
                 const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
                 setFormData(prev => ({ ...prev, aiChatToggle: !prev.aiChatToggle }));
               }}
-              className={`${styles.button} ${currentFormData.aiChatToggle ? styles.buttonRunning : ''}`}
-              style={{ backgroundColor: currentFormData.aiChatToggle ? '#22c55e' : '#e74c3c' }}
+              className={`${styles.button}`}
+              style={{ 
+                backgroundColor: currentFormData.aiChatToggle ? '#22c55e' : '#e74c3c',
+                minWidth: '120px'
+              }}
               data-action="ai-chat"
             >
               <MessageSquare size={16} />

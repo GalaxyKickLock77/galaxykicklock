@@ -455,18 +455,20 @@
 .toggleRow {
   grid-area: toggles;
   display: flex;
-  justify-content: center;
-  gap: 2rem;
+  justify-content: flex-start;  /* Change to flex-start to align toggles from the left */
+  gap: 1rem;  /* Reduce gap between toggles */
   margin: 0.75rem 0;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;  /* Add horizontal padding */
   background: rgba(0, 0, 0, 0.2);
   border-radius: 4px;
+  flex-wrap: wrap;  /* Allow wrapping if needed */
 }
 
 .toggle {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-right: 1rem;  /* Add spacing between toggles */
 }
 
 .toggle input[type="checkbox"] {
@@ -498,7 +500,7 @@
 .buttonGroup {
  grid-column: 1 / -1; /* Span across all columns */
  display: flex;
- justify-content: space-around; /* Distribute space evenly */
+ justify-content: space-between; /* Changed to space-between for better spacing */
  gap: 8px; /* Reduced gap */
  margin-top: 0.5rem; /* Reduced margin */
  padding-top: 0.5rem;
@@ -549,15 +551,6 @@
 .button[data-action="deploy"],
 .button[data-action="deployed"] {
   background-color: #22c55e; /* Green */
-}
-
-.button[data-action="ai-chat"] {
-  background-color: #e74c3c;
-  transition: background-color 0.3s ease;
-}
-
-.button[data-action="ai-chat"]:hover {
-  background-color: #c0392b;
 }
 
 .button:hover {
