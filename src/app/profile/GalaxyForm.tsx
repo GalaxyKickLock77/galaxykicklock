@@ -24,6 +24,7 @@ type FormData = {
   Rival: string;
   standOnEnemy: boolean;
   actionOnEnemy: boolean;
+  aiChatToggle: boolean;
 };
 
 type ButtonState = { loading: boolean; active: boolean; text: string; };
@@ -108,7 +109,8 @@ const GalaxyForm: React.FC = () => {
       RC2_defenceIntervalTime: '',
       RC2_stopDefenceTime: '',
       standOnEnemy: false,
-      actionOnEnemy: false
+      actionOnEnemy: false,
+      aiChatToggle: false
     };
   };
 
@@ -946,7 +948,8 @@ const GalaxyForm: React.FC = () => {
       { key: 'RC2_stopDefenceTime', label: 'RC2 Stop Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'Rival', label: 'Rival', placeholder: 'Enter Rival', color: '#FFA500', type: 'text' },
       { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
-      { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' },
+      { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' }
+      // Removed aiChatToggle from here
     ];
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
@@ -999,15 +1002,16 @@ const GalaxyForm: React.FC = () => {
                     onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
                     placeholder={placeholder}
                     style={{
-                      backgroundColor: '#2a2a2a', /* Darker background for inputs */
-                      border: currentError.includes(key) ? '1px solid red' : '1px solid #444', /* Red border for error, softer grey for normal */
+                      backgroundColor: '#2a2a2a',
+                      border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
                       color: '#fff',
                       WebkitTextFillColor: '#fff',
                       width: '100%',
                       padding: '0.5rem',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
                     }}
-                    title={currentError.includes(key) ? 'This field is required' : undefined}
+                    title={currentError.includes(key) ? `${label} is required` : undefined}
                   />
                 </>
               )}
@@ -1073,6 +1077,18 @@ const GalaxyForm: React.FC = () => {
                 </>
               )}
             </button>
+            <button
+              onClick={() => {
+                const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                setFormData(prev => ({ ...prev, aiChatToggle: !prev.aiChatToggle }));
+              }}
+              className={`${styles.button} ${currentFormData.aiChatToggle ? styles.buttonRunning : ''}`}
+              style={{ backgroundColor: currentFormData.aiChatToggle ? '#22c55e' : '#e74c3c' }}
+              data-action="ai-chat"
+            >
+              <MessageSquare size={16} />
+              <span>AI Chat {currentFormData.aiChatToggle ? 'On' : 'Off'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1090,64 +1106,52 @@ const GalaxyForm: React.FC = () => {
         </div>
       )}
       <div className={styles.header}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '5px' }}>
+        <div>
           {displayedUsername && (
-            <button
-              onClick={() => setShowProfilePopup(true)}
-              className={styles.profileButton}
-              aria-label="User Profile"
-            >
-              <UserCircle size={24} />
-            </button>
-          )}
-          {displayedUsername && (
-            <span className={styles.usernameDisplay}>{displayedUsername}</span>
+            <>
+              <button
+                onClick={() => setShowProfilePopup(true)}
+                className={styles.profileButton}
+                aria-label="User Profile"
+              >
+                <UserCircle size={24} />
+              </button>
+              <span className={styles.usernameDisplay}>{displayedUsername}</span>
+            </>
           )}
         </div>
-        <div style={{ flexGrow: 1, textAlign: 'center' }}>
-          <h1 className={styles.title}>
-            <span className={styles.kickLock}>KICK ~ LOCK</span>
-          </h1>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', position: 'relative' }}>
+        <h1 className={styles.title}>
+          <span className={styles.kickLock}>KICK ~ LOCK</span>
+        </h1>
+        <div>
           <button
             onClick={() => setShowNewFeaturesPopup(true)}
-            className={`${styles.button} ${showNotificationBell ? styles.blinkingBell : ''}`}
-            style={{ backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px', borderRadius: '5px', border: 'none', cursor: 'pointer', position: 'relative', color: 'white' }}
+            className={styles.headerButton}
             aria-label="New Features"
           >
-            <Bell size={14} />
-            {showNotificationBell && (
-              <span style={{ position: 'absolute', top: '-2px', right: '-2px', backgroundColor: 'red', borderRadius: '50%', width: '8px', height: '8px' }} />
-            )}
+            <span className={`${styles.notificationBell} ${showNotificationBell ? styles.blinkingBell : ''}`}>
+              <Bell size={16} />
+              {showNotificationBell && (
+                <span style={{ 
+                  position: 'absolute', 
+                  top: '0', 
+                  right: '0', 
+                  backgroundColor: 'red', 
+                  borderRadius: '50%', 
+                  width: '8px', 
+                  height: '8px',
+                  pointerEvents: 'none'
+                }} />
+              )}
+            </span>
           </button>
           <button
             onClick={() => setShowDiscordTooltip(!showDiscordTooltip)}
-            className={`${styles.button}`}
-            style={{ backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px', borderRadius: '5px', border: 'none', cursor: 'pointer', color: 'white' }}
+            className={styles.headerButton}
             aria-label="Reach out on Discord"
           >
-            <MessageSquare size={14} />
+            <MessageSquare size={16} />
           </button>
-          {showDiscordTooltip && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: '0',
-                marginTop: '5px',
-                backgroundColor: '#36393f',
-                color: '#fff',
-                padding: '8px 12px',
-                borderRadius: '5px',
-                whiteSpace: 'nowrap',
-                zIndex: 10,
-                boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-              }}
-            >
-              For any query or suggestions, please contact GalaxyKickLock
-            </div>
-          )}
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
             <LogOut size={16} />
             <span>Logout</span>
@@ -1155,7 +1159,7 @@ const GalaxyForm: React.FC = () => {
         </div>
         {showLoadingBar && (
           <div className={styles.headerBottomLoadingBarContainer}>
-            <div className={styles.loadingBar} style={{ width: `${loadingBarProgress}%` }}></div>
+            <div className={styles.loadingBar} style={{ width: `${loadingBarProgress}%` }} />
           </div>
         )}
       </div>
@@ -1177,12 +1181,6 @@ const GalaxyForm: React.FC = () => {
           {renderForm(3)}
           {renderForm(4)}
           {renderForm(5)}
-        </div>
-        <div className={styles.logsContainer}>
-          <h2 className={styles.logsTitle}>Logs Flow Details</h2>
-          <div className={styles.logContent}>
-
-          </div>
         </div>
       </div>
       {showDeployPopup && (

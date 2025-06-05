@@ -6,6 +6,7 @@
   --foreground: #ffffff;
   --input-border: #444; /* Softer input border */
   --input-border-focus: #e74c3c; /* Red border on focus */
+  --overlay-background: rgba(0, 0, 0, 0.2); /* Consistent background for overlays/loading bars */
   
   position: relative;
   width: 100%;
@@ -27,19 +28,58 @@
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between; /* Keep space-between for title centering */
-  align-items: center; /* Vertically center items */
-  padding: 8px 16px; /* Reduced padding */
+  justify-content: space-between;
+  padding: 8px 16px;
   background-color: #1a1a1a;
   position: fixed;
   top: 0;
-  display: flex; /* Ensure flexbox is enabled */
   left: 0;
   right: 0;
   z-index: 1000;
-  height: 50px; /* Reduced header height */
+  height: 50px;
   box-sizing: border-box;
   border-bottom: 1px solid #333;
+}
+
+.header > div {
+  display: flex;
+  align-items: center;
+}
+
+.header > div:first-child {
+  width: 200px;
+}
+
+.header > div:last-child {
+  width: 200px;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.header .headerButton {
+  background: transparent;
+  padding: 8px;
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  min-width: unset;
+  box-shadow: none;
+}
+
+.header .headerButton:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.title {
+  font-size: 2.5rem;
+  text-align: center;
+  margin: 0;
+  white-space: nowrap;
+  z-index: 1;
 }
 
 .loadingBarContainer {
@@ -48,27 +88,31 @@
   left: 0;
   width: 100%;
   height: 3px; /* Thin line */
-  background-color: rgba(0, 0, 0, 0.2); /* Semi-transparent background */
+  background-color: var(--overlay-background); /* Use variable for consistency */
   z-index: 1001; /* Above other header elements */
   overflow: hidden;
 }
 
 .headerBottomLoadingBarContainer {
-  position: absolute;
-  bottom: 0; /* Position at the bottom edge of the header */
-  left: 0;
-  width: 100%;
-  height: 3px; /* Thin line */
-  background-color: rgba(0, 0, 0, 0.2); /* Semi-transparent background */
-  z-index: 1001; /* Above other header elements */
-  overflow: hidden;
+  position: absolute; /* Position relative to the parent .header */
+  bottom: 0;
+  left: 16px; /* Align with the left padding of the header */
+  right: 16px; /* Align with the right padding of the header */
+  height: 2px;
+  background-color: var(--overlay-background); /* Use variable for consistency */
+  z-index: 1001;
+  transition: opacity 0.3s ease-in-out; /* Add a subtle transition for smoother appearance/disappearance if visibility changes */
 }
 
 .loadingBar {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%;
-  background-color: #22c55e; /* Green color for active state */
+  background: linear-gradient(90deg, #22c55e 0%, #4ade80 100%);
   width: 0%;
-  transition: width 0.3s ease-in-out;
+  transition: width 0.3s linear;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
 }
 
 .profileButton {
@@ -99,15 +143,15 @@
 .mainContent {
   display: flex;
   flex: 1;
-  margin-top: 50px; /* Adjusted to clear the fixed header */
-  padding: 0;
-  gap: 8px;
+  margin-top: 60px; /* Reduced margin from header */
+  margin-bottom: 30px; /* Reduced margin from footer */
+  padding: 0 20px;
   width: 100%;
-  justify-content: flex-start;
+  justify-content: center;
   box-sizing: border-box;
-  align-items: stretch;
-  flex-direction: row;
-  height: calc(100vh - 80px); /* Explicitly set height: 100vh - header height (50px) - footer height (30px) */
+  align-items: flex-start;
+  height: calc(100vh - 90px); /* Fixed height accounting for header and footer */
+  overflow: hidden; /* Prevent scrolling */
 }
 
 .logsTitle {
@@ -249,9 +293,6 @@
   height: 30px; /* Reduced footer height */
   background-color: #121212;
   width: 100%;
-  position: fixed;
-  bottom: 0;
-  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -271,21 +312,25 @@
 .title {
   font-size: 2.5rem;
   text-align: center;
+  margin: 0;
+  white-space: nowrap;
+  z-index: 1;
 }
 
 .formContainer {
   width: 100%;
-  max-width: 75%;
-  background: #1a1a1a; /* Solid background */
-  border-radius: 6px; /* Slightly smaller border-radius */
-  padding: 0.75rem; /* Reduced padding */
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); /* Adjusted shadow */
-  border: 1px solid #e74c3c; /* Red border */
+  max-width: 900px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 1rem; /* Reduced padding */
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  border: 1px solid #e74c3c;
   transition: all 0.3s ease;
   position: relative;
-  overflow-y: hidden; /* Prevent vertical scrolling within the form container */
-  height: 100%; /* Make it take full height of mainContent */
-  box-sizing: border-box; /* Include padding in height calculation */
+  height: 100%; /* Take full height */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 
@@ -303,7 +348,7 @@
   min-width: auto;
   box-shadow: 0 0 15px rgba(255, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   border-radius: 8px;
-  font-weight: bold;
+  font-weight: 400;
   letter-spacing: 0.5px;
   border: 1px solid rgba(255, 0, 0, 0.5);
   display: flex;
@@ -382,6 +427,8 @@
 
 .formContent {
   animation: fadeIn 0.3s ease-in-out;
+  height: 100%; /* Ensure form content takes full height of its container */
+  overflow-y: auto; /* Allow vertical scrolling within the form content */
 }
 
 @keyframes fadeIn {
@@ -391,127 +438,79 @@
 
 .form {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* Three columns */
-  gap: 0.4rem; /* Further reduced gap for tighter spacing */
-  max-width: 100%; /* Allow form to take full width of its container */
-  margin: 0 auto;
-  padding: 0.75rem; /* Slightly reduced padding */
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-areas:
+    "rc1 rc2 planet"
+    "rival rival rival"
+    "toggles toggles toggles"
+    "start-attack attack-interval stop-attack"
+    "start-defence defence-interval stop-defence";
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem; /* Reduced padding */
   box-sizing: border-box;
-  }
+}
+
+.toggleRow {
+  grid-area: toggles;
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.toggle input[type="checkbox"] {
+  width: 36px;
+  height: 20px;
+  appearance: none;
+  background: #333;
+  border-radius: 20px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.toggle label {
+  color: #FFFFFF;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Remove these unused classes */
+.toggleContainer,
+.checkboxContainer,
+.checkboxGroup {
+  display: none;
+}
 
 .buttonGroup {
  grid-column: 1 / -1; /* Span across all columns */
  display: flex;
  justify-content: space-around; /* Distribute space evenly */
- gap: 12px; /* Increased gap between buttons */
- margin-top: 0.75rem; /* Adjusted margin-top */
- padding-top: 0.75rem; /* Add padding to separate from inputs */
+ gap: 8px; /* Reduced gap */
+ margin-top: 0.5rem; /* Reduced margin */
+ padding-top: 0.5rem;
  border-top: 1px solid rgba(255, 0, 0, 0.2); /* Separator line */
 }
 
 .form > div {
- margin-bottom: 0.15rem; /* Further reduced margin between form elements */
+ margin-bottom: 0.1rem; /* Minimal margin */
 }
 
 .formContainer {
  /* Removed padding-bottom from formContainer as height and overflow-y handle it */
-}
-
-@media (max-width: 768px) {
-  .form {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .tabsContainer {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  
-  .tabButton {
-    flex: 1;
-    min-width: 80px;
-    font-size: 0.9rem;
-    padding: 0.4rem 0.6rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .form {
-    grid-template-columns: 1fr;
-  }
-  
-  .buttonGroup {
-    flex-direction: column;
-  }
-  
-  .title {
-    font-size: 2.2rem;
-  }
-}
-
-/* CRITICAL FIX - Enhanced input styling to prevent autofill color issues */
-.input {
-  padding: 0.75rem 1rem;
-  background-color: #2a2a2a !important; /* Darker background for inputs */
-  border: 1px solid #444 !important; /* Softer border */
-  border-radius: 4px; /* Slightly smaller border-radius */
-  color: white !important;
-  font-size: 0.9rem;
-  transition: all 0.3s;
-  width: 100%;
-  -webkit-text-fill-color: white !important;
-  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important; /* Adjusted for new background */
-  box-shadow: 0 0 0 1000px #2a2a2a inset !important; /* Adjusted for new background */
-  caret-color: white !important;
-}
-
-.input:focus {
-  outline: none !important;
-  border-color: #e74c3c !important; /* Red border on focus */
-  background-color: #2a2a2a !important;
-  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-}
-
-.input::placeholder {
-  color: rgba(255, 255, 255, 0.5) !important;
-  opacity: 1 !important;
-}
-
-/* Handle autofill specifically */
-.input:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-  -webkit-text-fill-color: white !important;
-  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-  background-color: #2a2a2a !important;
-  color: white !important;
-}
-
-.input:-webkit-autofill:hover,
-.input:-webkit-autofill:focus,
-.input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-  -webkit-text-fill-color: white !important;
-  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-  background-color: #2a2a2a !important;
-  color: white !important;
-  background-image: none !important;
-  transition-property: background-color, box-shadow !important;
-  transition-delay: 5000s !important;
-}
-
-/* Force override browser's native styling */
-.input[type="text"],
-.input[type="text"]:focus {
-  background-color: #2a2a2a !important;
-  -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-  box-shadow: 0 0 0 1000px #2a2a2a inset !important;
-}
-
-.timeInput {
-  width: 100%;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 1px;
 }
 
 .button {
@@ -519,7 +518,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem; /* Reduced padding */
   color: #ffffff;
   border: none;
   border-radius: 4px; /* Slightly smaller border-radius */
@@ -550,6 +549,15 @@
 .button[data-action="deploy"],
 .button[data-action="deployed"] {
   background-color: #22c55e; /* Green */
+}
+
+.button[data-action="ai-chat"] {
+  background-color: #e74c3c;
+  transition: background-color 0.3s ease;
+}
+
+.button[data-action="ai-chat"]:hover {
+  background-color: #c0392b;
 }
 
 .button:hover {
@@ -614,24 +622,20 @@
   background-color: #3b82f6 !important;
 }
 
-/* Blinking animation for the notification bell */
+/* Update notification bell specific styles */
+.notificationBell {
+  position: relative;
+  isolation: isolate;
+}
+
+.notificationBell.blinkingBell {
+  animation: blink 1.5s infinite;
+}
+
 @keyframes blink {
   0% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.3; }
   100% { opacity: 1; }
-}
-
-.blinkingBell {
-  animation: blink 1s infinite;
-}
-
-@keyframes loading {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(100%);
-  }
 }
 
 /* Override styles for Firefox if needed */
@@ -648,13 +652,21 @@
 
 /* Logs Container Styling */
 .logsContainer {
-  background-color: #1a1a1a;
-  border: 1px solid #e74c3c; /* Red border */
-  border-radius: 8px;
-  padding: 10px; /* Reduced padding */
-  min-width: 550px;
-  height: 100%; /* Make it take full height of mainContent */
-  overflow-y: auto;
-  display: flex; /* Make it a flex container */
-  flex-direction: column; /* Arrange children in a column */
+  display: none; /* Hide the logs container */
+}
+
+.input:invalid {
+  border-color: #ff4444 !important;
+  box-shadow: 0 0 5px rgba(255,0,0,0.3) !important;
+}
+
+/* Highlight animation for invalid fields */
+@keyframes highlightError {
+  0% { border-color: #ff4444; }
+  50% { border-color: #ff0000; }
+  100% { border-color: #ff4444; }
+}
+
+.input.error {
+  animation: highlightError 1s ease-in-out infinite;
 }
