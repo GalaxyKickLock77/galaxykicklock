@@ -537,7 +537,7 @@ const GalaxyForm: React.FC = () => {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (supabaseUrl && supabaseAnonKey) supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
     else {
-      console.error('Supabase URL or Anon Key not configured.');
+      console.error('Database URL or Anon Key not configured.');
       return;
     }
 
@@ -545,9 +545,9 @@ const GalaxyForm: React.FC = () => {
     const channel = supabaseInstance.channel('session_updates');
     channel
       .on('broadcast', { event: 'session_terminated' }, (message) => {
-        console.log('[GalaxyForm] Received broadcast:', message);
+        console.log('[GalaxyForm] Received broadcast (masked).');
         const storedUserId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
-        console.log('[GalaxyForm] Stored UserId:', storedUserId);
+        console.log('[GalaxyForm] Stored UserId (masked).');
         if (message.payload && message.payload.userId && storedUserId && message.payload.userId.toString() === storedUserId) {
           console.log('[GalaxyForm] User ID matched. Dispatching globalSessionTerminated event.');
           const event = new CustomEvent('globalSessionTerminated', {
@@ -559,7 +559,7 @@ const GalaxyForm: React.FC = () => {
         }
       })
       .on('broadcast', { event: 'token_expired' }, async (message) => {
-        console.log('[GalaxyForm] Received token_expired broadcast:', message);
+        console.log('[GalaxyForm] Received token_expired broadcast (masked).');
         const storedUserId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
         if (message.payload && message.payload.userId && storedUserId && message.payload.userId.toString() === storedUserId) {
           console.log('[GalaxyForm] Token expired for current user. Showing token expired popup.');
@@ -572,13 +572,13 @@ const GalaxyForm: React.FC = () => {
           try {
             await handleUndeploy();
           } catch (undeployError) {
-            console.error('Error during undeploy triggered by token_expired:', undeployError);
+            console.error('Error during undeploy triggered by token_expired (masked).');
           }
           await handleLogout();
         }
       })
       .subscribe(status => {
-        console.log('[GalaxyForm] Supabase channel status:', status);
+        console.log('[GalaxyForm] Channel status:', status);
       });
     const beforeUnloadHandler = () => {
       const storedUser = sessionStorage.getItem(STORAGE_KEYS.USERNAME);
@@ -586,7 +586,7 @@ const GalaxyForm: React.FC = () => {
     };
     window.addEventListener('beforeunload', beforeUnloadHandler);
     return () => {
-      if (channel) supabaseInstance?.removeChannel(channel).catch(err => console.error("Error removing channel:", err));
+      if (channel) supabaseInstance?.removeChannel(channel).catch(err => console.error("Error removing channel (masked).", err));
       if (activationProgressTimerId !== null) window.clearInterval(activationProgressTimerId);
       window.removeEventListener('beforeunload', beforeUnloadHandler);
     };
