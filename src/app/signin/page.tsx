@@ -94,10 +94,8 @@ export default function SignInPage() {
 
             if (response.ok) {
                 showToast(data.message || "Successfully signed in!", 'success');
-                // Add a small delay before showing the modal to ensure toast renders first
-                setTimeout(() => {
-                    setShowNoticeModal(true);
-                }, 100);
+                setShowNoticeModal(true); // Show the modal
+                // Do NOT call completeLoginFlow() here. It will be called after the modal is confirmed.
             } else {
                 if (response.status === 409) {
                     showToast(data.message || "Previous session cleanup encountered an issue. Please try signing in again.", 'error');
