@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from 'react-toastify';
+import ImportantNoticeModal from '../../components/ImportantNoticeModal';
 
 // SECURITY FIX: Removed client-side Supabase initialization
 // All authentication is now handled server-side via secure HTTP-only cookies
@@ -12,6 +13,7 @@ export default function SignInPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [showNoticeModal, setShowNoticeModal] = useState(false);
     const router = useRouter();
 
     const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error', autoClose: number = 3000) => {
@@ -51,6 +53,11 @@ export default function SignInPage() {
         router.push("/profile?username=" + encodeURIComponent(username));
     };
 
+    const handleNoticeConfirm = () => {
+        setShowNoticeModal(false);
+        completeLoginFlow();
+    };
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (isLoading) return;
@@ -86,12 +93,11 @@ export default function SignInPage() {
             const data = await response.json();
 
             if (response.ok) {
-                // SECURITY FIX: No longer storing session data in client-side storage
-                // Session is managed via secure HTTP-only cookies
                 showToast(data.message || "Successfully signed in!", 'success');
+                // Add a small delay before showing the modal to ensure toast renders first
                 setTimeout(() => {
-                    completeLoginFlow(); 
-                }, 1000);
+                    setShowNoticeModal(true);
+                }, 100);
             } else {
                 if (response.status === 409) {
                     showToast(data.message || "Previous session cleanup encountered an issue. Please try signing in again.", 'error');
@@ -109,67 +115,75 @@ export default function SignInPage() {
     };
 
     return (
-        <div className="welcome-container">
-            <div className="auth-card max-w-md w-full p-8">
-                <h1 className="text-center mb-8">
-                    <span style={{ 
-                        color: '#D32F2F',
-                        fontFamily: 'Audiowide, cursive',
-                        fontSize: '2rem',
-                        textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
-                    }}>
-                        KICK ~ LOCK
-                    </span>
-                </h1>
+        <>
+            <div className="welcome-container">
+                <div className="auth-card max-w-md w-full p-8">
+                    <h1 className="text-center mb-8">
+                        <span style={{
+                            color: '#D32F2F',
+                            fontFamily: 'Audiowide, cursive',
+                            fontSize: '2rem',
+                            textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
+                        }}>
+                            KICK ~ LOCK
+                        </span>
+                    </h1>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="form-group">
-                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
-                            Username
-                        </label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="input-field"
-                            placeholder="Enter username"
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="form-group">
+                            <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                                Username
+                            </label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="input-field"
+                                placeholder="Enter username"
+                                disabled={isLoading}
+                                autoComplete="username"
+                                maxLength={50}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                                Password
+                            </label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="input-field"
+                                placeholder="Enter password"
+                                disabled={isLoading}
+                                autoComplete="current-password"
+                                maxLength={128}
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="welcome-button w-full mt-6"
                             disabled={isLoading}
-                            autoComplete="username"
-                            maxLength={50}
-                        />
+                        >
+                            {isLoading ? "Signing in..." : "Sign In"}
+                        </button>
+                    </form>
+
+                    <div className="mt-6 text-center">
+                        <Link href="/signup" className="text-primary-color hover:text-secondary-color transition-colors">
+                            Don't have an account? Sign up
+                        </Link>
                     </div>
-
-                    <div className="form-group">
-                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
-                            Password
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="input-field"
-                            placeholder="Enter password"
-                            disabled={isLoading}
-                            autoComplete="current-password"
-                            maxLength={128}
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        className="welcome-button w-full mt-6"
-                        disabled={isLoading}
-                    >
-                        {isLoading ? "Signing in..." : "Sign In"}
-                    </button>
-                </form>
-
-                <div className="mt-6 text-center">
-                    <Link href="/signup" className="text-primary-color hover:text-secondary-color transition-colors">
-                        Don't have an account? Sign up
-                    </Link>
                 </div>
             </div>
-        </div>
+
+            <ImportantNoticeModal
+                isOpen={showNoticeModal}
+                onClose={() => setShowNoticeModal(false)}
+                onConfirm={handleNoticeConfirm}
+            />
+        </>
     );
 }
