@@ -191,12 +191,12 @@ export class SecureQueryBuilder {
    * SECURITY FIX: Secure select query with parameter validation
    */
 // Define filter types
-type FilterOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte';
-interface FilterCondition {
+export type FilterOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte';
+export interface FilterCondition {
   operator: FilterOperator;
   value: any;
 }
-type FilterValue = any | FilterCondition;
+export type FilterValue = any | FilterCondition;
 
 // ... (rest of the class definition)
 
