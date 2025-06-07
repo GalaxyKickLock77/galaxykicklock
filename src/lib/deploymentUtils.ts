@@ -1,6 +1,7 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js'; // Import createClient
 import { updateUserDeployStatus } from '@/lib/auth'; 
 import { fetchFromGitHub, GitHubRun } from '@/lib/githubApiUtils'; // Import for direct GitHub API calls
+import { secureLog } from '@/lib/secureLogger'; // SECURITY FIX: Import secure logging
 
 // Constants for GitHub API, mirroring those in /git/galaxyapi/runs/route.ts
 const GITHUB_ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'galaxykicklock7';
@@ -14,7 +15,8 @@ const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline7'
 export function getLogicalUsername(user: { username: string }): string {
   if (!user || !user.username) {
     // Fallback or error if username is not provided, though callers should ensure it.
-    console.error('[getLogicalUsername] Username is missing.');
+    // SECURITY FIX: Use secure logging
+    secureLog.error('Username is missing for logical username generation', null, 'getLogicalUsername');
     return 'invalid_user_7890'; 
   }
   return `${user.username}7890`;
@@ -45,7 +47,10 @@ export async function performServerSideUndeploy(
 const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Use server-side only URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('[ServerUndeploy] Supabase client cannot be initialized (missing URL or Service Key).');
+      // SECURITY FIX: Use secure logging
+      secureLog.error('Supabase client cannot be initialized due to missing configuration', 
+        { hasUrl: !!supabaseUrl, hasServiceKey: !!supabaseServiceRoleKey }, 
+        'ServerUndeploy');
       return { success: false, message: 'Server configuration error for undeploy.' };
     }
     SClient = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -58,7 +63,10 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (deployTimestamp && typeof activeFormNumber === 'number' && activeFormNumber >= 0) { 
     const logicalUsername = getLogicalUsername({ username: usernameForLogical });
     if (logicalUsername.startsWith('invalid_user_')) {
-      console.error(`[ServerUndeploy] Cannot stop loca.lt for user ${userId}: username missing.`);
+      // SECURITY FIX: Use secure logging with masked user ID
+      secureLog.error('Cannot stop loca.lt service due to invalid username', 
+        { userIdMasked: 'user_[MASKED]', logicalUsernamePrefix: 'invalid_user_' }, 
+        'ServerUndeploy');
       // This is a partial failure; GitHub Action might still be processed if activeRunId is present.
       locaLtStopSuccess = false;
       locaLtMessage = 'Failed to stop loca.lt service: Username missing.';
@@ -78,12 +86,24 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
           locaLtStopSuccess = false;
           const errorText = await undeployResponse.text();
           locaLtMessage = `Failed to send stop command to loca.lt (form ${activeFormNumber}): Status ${undeployResponse.status}, Response: ${errorText}`;
-          console.error(`[ServerUndeploy] ${locaLtMessage}`);
+          // SECURITY FIX: Use secure logging that masks sensitive response data
+          secureLog.error('Failed to send stop command to loca.lt service', {
+            formNumber: activeFormNumber,
+            status: undeployResponse.status,
+            statusText: undeployResponse.statusText,
+            hasErrorText: errorText.length > 0,
+            errorTextLength: errorText.length
+          }, 'ServerUndeploy');
         }
       } catch (e: any) {
         locaLtStopSuccess = false;
         locaLtMessage = `Network error stopping loca.lt (form ${activeFormNumber}): ${e.message}`;
-        console.error(`[ServerUndeploy] ${locaLtMessage}`);
+        // SECURITY FIX: Use secure logging
+        secureLog.error('Network error stopping loca.lt service', {
+          formNumber: activeFormNumber,
+          errorType: e.constructor.name,
+          hasMessage: 'message' in e
+        }, 'ServerUndeploy');
       }
     }
   }
@@ -104,12 +124,24 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         githubCancelSuccess = false;
         const errorText = await cancelApiResponse.text().catch(() => `Status ${cancelApiResponse.status}`);
         githubCancelMessage = `Failed to send cancellation request for GitHub run ${activeRunId}: Status ${cancelApiResponse.status}, Response: ${errorText}.`;
-        console.error(`[ServerUndeploy] ${githubCancelMessage}`);
+        // SECURITY FIX: Use secure logging that masks sensitive response data
+        secureLog.error('Failed to send cancellation request to automation service', {
+          runIdMasked: 'run_[MASKED]',
+          status: cancelApiResponse.status,
+          statusText: cancelApiResponse.statusText,
+          hasErrorText: errorText.length > 0,
+          errorTextLength: errorText.length
+        }, 'ServerUndeploy');
       }
     } catch (cancelError: any) {
       githubCancelSuccess = false;
       githubCancelMessage = `Exception calling GitHub API to cancel run ${activeRunId}: ${cancelError.message}.`;
-      console.error(`[ServerUndeploy] ${githubCancelMessage}`);
+      // SECURITY FIX: Use secure logging
+      secureLog.error('Exception calling automation service API for cancellation', {
+        runIdMasked: 'run_[MASKED]',
+        errorType: cancelError.constructor.name,
+        hasMessage: 'message' in cancelError
+      }, 'ServerUndeploy');
     }
   }
 
@@ -126,7 +158,7 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     return { success: true, message: detailedLogMessage };
   } else {
     // For partial or full failure, provide a user-friendly message.
-    // The detailedLogMessage is already console.error'd above for GitHub/loca.lt failures.
+    // The detailed log messages are already securely logged above for GitHub/loca.lt failures.
     return { success: false, message: `Failed to undeploy previous active session. Undeploy partially failed. Please try again or contact support.` };
   }
 }

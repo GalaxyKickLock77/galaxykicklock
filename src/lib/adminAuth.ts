@@ -34,7 +34,7 @@ export async function validateAdminSession(request: NextRequest): Promise<AdminS
   const adminIdCookie = request.cookies.get('adminId');
   const adminUsernameCookie = request.cookies.get('adminUsername');
   const adminSessionIdCookie = request.cookies.get('adminSessionId');
-  const adminSessionTokenCookie = request.cookies.get('adminSessionToken'); // New: Get session token
+  const adminSessionTokenCookie = request.cookies.get('adminSessionToken');
 
   if (!adminIdCookie?.value || !adminUsernameCookie?.value || !adminSessionIdCookie?.value || !adminSessionTokenCookie?.value) {
     console.log('Missing one or more admin session cookies (adminId, adminUsername, adminSessionId, adminSessionToken).');
