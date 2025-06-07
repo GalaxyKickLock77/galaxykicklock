@@ -1,4 +1,4 @@
-import { SupabaseClient, createClient } from '@supabase/supabase-js'; // Import createClient
+// import { SupabaseClient, createClient } from '@supabase/supabase-js'; // No longer needed
 import { updateUserDeployStatus } from '@/lib/auth'; 
 import { fetchFromGitHub, GitHubRun } from '@/lib/githubApiUtils'; // Import for direct GitHub API calls
 import { secureLog } from '@/lib/secureLogger'; // SECURITY FIX: Import secure logging
@@ -37,22 +37,12 @@ export async function performServerSideUndeploy(
   usernameForLogical: string,
   deployTimestamp: string | null | undefined,
   activeFormNumber: number | null | undefined,
-  activeRunId?: number | string | null, // Made activeRunId optional for calls not having it (like beacon)
-  supabaseService?: SupabaseClient // Make supabaseService optional if it can create its own
+  activeRunId?: number | string | null // Made activeRunId optional for calls not having it (like beacon)
+  // supabaseService?: SupabaseClient // Parameter removed
 ): Promise<{ success: boolean; message: string }> {
   
-  // Create Supabase client if not provided
-  let supabase = supabaseService;
-  if (!supabase) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return { success: false, message: 'Supabase configuration missing' };
-    }
-    
-    supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-  }
+  // Supabase client creation logic removed.
+  // updateUserDeployStatus will handle its own DB connection via SecureQueryBuilder.
 
   try {
     // Generate logical username
@@ -85,7 +75,8 @@ export async function performServerSideUndeploy(
     }
 
     // Update user deploy status in database
-    await updateUserDeployStatus(userId, null, null);
+    // Pass null for activeRunId as well, since we are clearing deployment status
+    await updateUserDeployStatus(userId, null, null, null);
     
     // If activeRunId is provided, attempt to cancel the GitHub Actions run
     if (activeRunId) {

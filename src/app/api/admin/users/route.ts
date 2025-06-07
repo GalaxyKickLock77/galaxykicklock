@@ -1,30 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateAdminSession } from '@/lib/adminAuth';
 import { performServerSideUndeploy } from '@/lib/deploymentUtils'; // Import the centralized undeploy function
+import { SecureQueryBuilder, DatabaseConnectionPool } from '@/lib/secureDatabase'; // Import SecureQueryBuilder and DatabaseConnectionPool
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // URL can often be public
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Service role key for admin operations
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // No longer needed here
+// const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // No longer needed here
 
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  console.error('Supabase URL or Service Role Key is missing for /api/admin/users. Check environment variables.');
-  // Do not initialize supabase client here if config is missing, handle in function
-}
-// Initialize Supabase client per request or globally if appropriate, ensuring service key is used.
-// For this route, it's safer to initialize within the handler to ensure service key is checked.
+// if (!supabaseUrl || !supabaseServiceRoleKey) { // Handled by SecureQueryBuilder/DatabaseConnectionPool
+//   console.error('Supabase URL or Service Role Key is missing for /api/admin/users. Check environment variables.');
+// }
 
 export async function DELETE(request: NextRequest) {
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
-  }
-  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+  // Initialization of queryBuilder will happen after admin session validation potentially
+  // to ensure resources are used only when necessary.
 
   const adminSession = await validateAdminSession(request);
   if (!adminSession) {
     return NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
   }
 
+  let queryBuilder: SecureQueryBuilder | null = null;
+  let rawSupabaseClientForUndeploy: any = null; // Using 'any' for SupabaseClient type from pool
+  let rawSupabaseClientForBroadcast: any = null;
+
   try {
+    queryBuilder = await SecureQueryBuilder.create('service');
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const tokenValue = searchParams.get('token'); // The actual token string
@@ -33,58 +33,67 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: 'userId and token query parameters are required.' }, { status: 400 });
     }
 
-    // 1. Fetch user details before deletion to get username and session info for broadcast/undeploy
-    const { data: userToDelete, error: fetchUserError } = await supabase
-      .from('users')
-      .select('id, username, active_session_id, deploy_timestamp, active_form_number, active_run_id') // Add active_run_id
-      .eq('id', userId)
-      .single();
+    // 1. Fetch user details before deletion
+    const { data: userToDelete, error: fetchUserError } = await queryBuilder.secureSelect(
+      'users',
+      ['id', 'username', 'active_session_id', 'deploy_timestamp', 'active_form_number', 'active_run_id'],
+      { id: userId },
+      { single: true }
+    );
 
     if (fetchUserError || !userToDelete) {
       console.error(`Error fetching user ${userId} for deletion:`, fetchUserError?.message || 'User not found.');
-      return NextResponse.json({ message: `Failed to find user for deletion: ${fetchUserError?.message || 'User not found.'}` }, { status: 404 });
+      const status = fetchUserError?.code === 'PGRST116' ? 404 : 500; // PGRST116: "Searched for a single row, but found no rows"
+      return NextResponse.json({ message: `Failed to find user for deletion: ${fetchUserError?.message || 'User not found.'}` }, { status });
     }
 
     console.log(`[AdminUsersRoute] Fetched user details for ${userId}:`, userToDelete);
 
-    // 2. Perform server-side undeploy BEFORE invalidating session or deleting user
-    // Check if deploy_timestamp is present and active_form_number is a number (including 0)
+    // 2. Perform server-side undeploy
     if (userToDelete.deploy_timestamp && typeof userToDelete.active_form_number === 'number' && userToDelete.active_form_number >= 0) {
       console.log(`[AdminUsersRoute] User ${userId} has active deployment. Attempting server-side undeploy.`);
-      const undeployResult = await performServerSideUndeploy(
-        userToDelete.id,
-        userToDelete.username,
-        userToDelete.deploy_timestamp,
-        userToDelete.active_form_number,
-        userToDelete.active_run_id, // Pass the fetched active_run_id
-        supabase // Pass the service client
-      );
-      if (!undeployResult.success) {
-        console.error(`[AdminUsersRoute] Server-side undeploy for user ${userId} failed: ${undeployResult.message}`);
-        // Decide if this should block user deletion or just log. For now, log and proceed.
-      } else {
-        console.log(`[AdminUsersRoute] Server-side undeploy for user ${userId} successful: ${undeployResult.message}`);
+      try {
+        rawSupabaseClientForUndeploy = await DatabaseConnectionPool.getInstance().getConnection('service');
+        const undeployResult = await performServerSideUndeploy(
+          userToDelete.id,
+          userToDelete.username,
+          userToDelete.deploy_timestamp,
+          userToDelete.active_form_number,
+          userToDelete.active_run_id,
+          rawSupabaseClientForUndeploy // Pass the raw client
+        );
+        if (!undeployResult.success) {
+          console.error(`[AdminUsersRoute] Server-side undeploy for user ${userId} failed: ${undeployResult.message}`);
+        } else {
+          console.log(`[AdminUsersRoute] Server-side undeploy for user ${userId} successful: ${undeployResult.message}`);
+        }
+      } catch (undeployError: any) {
+        console.error(`[AdminUsersRoute] Exception during server-side undeploy for user ${userId}:`, undeployError.message);
+      } finally {
+        if (rawSupabaseClientForUndeploy) {
+          DatabaseConnectionPool.getInstance().releaseConnection(rawSupabaseClientForUndeploy);
+        }
       }
     } else {
       console.log(`[AdminUsersRoute] User ${userId} has no active deployment to undeploy.`);
     }
 
-    // 3. Invalidate the user's session in the database (set session_token and active_session_id to null)
-    // This ensures the user is logged out even if the broadcast fails.
-    const { error: invalidateSessionError } = await supabase
-      .from('users')
-      .update({ session_token: null, active_session_id: null })
-      .eq('id', userId);
+    // 3. Invalidate the user's session in the database
+    const { error: invalidateSessionError } = await queryBuilder.secureUpdate(
+      'users',
+      { session_token: null, active_session_id: null },
+      { id: userId }
+    );
 
     if (invalidateSessionError) {
       console.error(`[AdminUsersRoute] Error invalidating session for user ${userId}:`, invalidateSessionError.message);
       // Proceed with deletion, but log this issue.
     }
 
-    // 4. Send a Supabase broadcast event to the user's channel
-    // This will trigger the client-side logic to show the popup and redirect.
+    // 4. Send a Supabase broadcast event
     try {
-      await supabase
+      rawSupabaseClientForBroadcast = await DatabaseConnectionPool.getInstance().getConnection('service');
+      await rawSupabaseClientForBroadcast
         .channel('session_updates')
         .send({
           type: 'broadcast',
@@ -94,26 +103,28 @@ export async function DELETE(request: NextRequest) {
       console.log(`[AdminUsersRoute] Broadcasted session_terminated for user ${userId}.`);
     } catch (broadcastEx: any) {
       console.error(`[AdminUsersRoute] Exception during broadcast for user ${userId}:`, broadcastEx.message);
+    } finally {
+      if (rawSupabaseClientForBroadcast) {
+        DatabaseConnectionPool.getInstance().releaseConnection(rawSupabaseClientForBroadcast);
+      }
     }
 
-
     // 5. Delete the associated token from the tokengenerate table
-    const { error: tokenDeleteError } = await supabase
-      .from('tokengenerate')
-      .delete()
-      .eq('token', tokenValue);
+    const { error: tokenDeleteError } = await queryBuilder.secureDelete(
+      'tokengenerate',
+      { token: tokenValue }
+    );
 
     if (tokenDeleteError) {
       console.error(`Error deleting token ${tokenValue} from tokengenerate:`, tokenDeleteError.message);
-      // Decide if this should block user deletion or just log. For now, log and proceed to delete user.
-      // return NextResponse.json({ message: `User deleted, but failed to delete associated token: ${tokenDeleteError.message}` }, { status: 207 });
+      // Log and proceed.
     }
 
     // 6. Finally, delete the user record from the users table
-    const { error: userDeleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
+    const { error: userDeleteError } = await queryBuilder.secureDelete(
+      'users',
+      { id: userId }
+    );
 
     if (userDeleteError) {
       console.error(`Error deleting user ${userId} from users table:`, userDeleteError.message);
@@ -124,6 +135,11 @@ export async function DELETE(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error in /api/admin/users DELETE route:', error.message);
-    return NextResponse.json({ message: 'Failed to delete user and/or token.', error: error.message }, { status: 500 });
+    // SecureQueryBuilder might throw its own errors if not caught internally
+    const message = error.code === 'DB_ERROR' ? 'A database error occurred.' : error.message;
+    return NextResponse.json({ message: `Failed to delete user and/or token. ${message}` }, { status: 500 });
+  } finally {
+    // queryBuilder itself handles releasing its main connection in its methods
+    // We've handled releasing raw clients for undeploy and broadcast
   }
 }

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import bcrypt from 'bcrypt';
 import { validateAuthInput, validateRequestSize } from '@/lib/inputValidation'; // SECURITY FIX: Import validation utilities
+import { SecureQueryBuilder } from '@/lib/secureDatabase'; // Import SecureQueryBuilder
 
-const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Use server-side only URL
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// const supabaseUrl = process.env.SUPABASE_URL; // No longer needed
+// const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // No longer needed
 
-if (!supabaseUrl) {
-  console.error('Supabase URL is missing for /api/auth/signup. Check environment variables.');
-}
+// if (!supabaseUrl) { // Handled by SecureQueryBuilder
+//   console.error('Supabase URL is missing for /api/auth/signup. Check environment variables.');
+// }
 
 const SALT_ROUNDS = 12; // SECURITY FIX: Increased from 10 to 12 for better security
 
@@ -25,13 +25,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Invalid request.' }, { status: 403 });
   }
 
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
-  }
-
-  const supabaseService: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+  // SecureQueryBuilder will handle its own configuration checks
+  let queryBuilder: SecureQueryBuilder;
 
   try {
+    queryBuilder = await SecureQueryBuilder.create('service');
     const requestData = await request.json();
 
     // SECURITY FIX: Signup-specific input validation (more permissive than strict auth validation)
@@ -126,10 +124,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Verify Token (from client-side verifyToken)
-    const { data: tokenDataArray, error: tokenVerifyError } = await supabaseService
-      .from('tokengenerate')
-      .select('*')
-      .eq('token', sanitizedToken);
+    const { data: tokenDataArray, error: tokenVerifyError } = await queryBuilder.secureSelect(
+      'tokengenerate',
+      '*', // Assuming all columns from tokengenerate might be needed as before
+      { token: sanitizedToken }
+    );
 
     if (tokenVerifyError) {
       console.error('Error verifying token in DB:', tokenVerifyError.message);
@@ -140,7 +139,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Invalid token provided.' }, { status: 400 });
     }
     
-    const tokenEntry = tokenDataArray[0];
+    const tokenEntry = tokenDataArray[0]; // secureSelect returns an array
     if (tokenEntry.status === 'InUse') {
       return NextResponse.json({ message: 'Token has already been used.' }, { status: 400 });
     }
@@ -153,35 +152,42 @@ export async function POST(request: NextRequest) {
     // 2. Hash password and Insert User
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const { data: newUser, error: userInsertError } = await supabaseService
-      .from("users")
-      .insert([{ username: sanitizedUsername, password: hashedPassword, token: sanitizedToken }])
-      .select()
-      .single();
+    const { data: insertedUsers, error: userInsertError } = await queryBuilder.secureInsert(
+      "users",
+      { username: sanitizedUsername, password: hashedPassword, token: sanitizedToken },
+      // Request specific columns needed, especially 'id'
+      { returning: ['id', 'username', 'token'] }
+    );
 
     if (userInsertError) {
-      if (userInsertError.code === '23505') { // Unique constraint violation
+      if (userInsertError.code === '23505') { // Unique constraint violation (PostgreSQL specific code)
         return NextResponse.json({ message: 'Username already taken. Please try a different one.' }, { status: 409 });
       }
       console.error('Error inserting user:', userInsertError.message);
       return NextResponse.json({ message: 'Failed to create user.' }, { status: 500 });
     }
 
+    // secureInsert returns an array of inserted records.
+    const newUser = Array.isArray(insertedUsers) && insertedUsers.length > 0 ? insertedUsers[0] : null;
+
     if (!newUser || !newUser.id) {
-      console.error('User insertion did not return expected data.');
-      return NextResponse.json({ message: 'Failed to create user (unexpected data).' }, { status: 500 });
+      console.error('User insertion did not return expected data or ID.');
+      return NextResponse.json({ message: 'Failed to create user (unexpected data from DB).' }, { status: 500 });
     }
     
     const userId = newUser.id;
 
     // 3. Associate Token with User & Update Token Status
-    const { error: tokenUpdateError } = await supabaseService
-      .from('tokengenerate')
-      .update({ userid: userId, status: 'InUse' })
-      .eq('token', sanitizedToken);
+    const { error: tokenUpdateError } = await queryBuilder.secureUpdate(
+      "tokengenerate",
+      { userid: userId, status: 'InUse' },
+      { token: sanitizedToken }
+    );
 
     if (tokenUpdateError) {
       console.error('Error updating token status/association:', tokenUpdateError.message);
+      // Potentially consider rolling back user creation or marking user as inactive if this fails.
+      // For now, following original logic of reporting error but user is still created.
       return NextResponse.json({ message: 'User created, but failed to update token status.' }, { status: 500 });
     }
 
@@ -194,7 +200,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof SyntaxError) {
       return NextResponse.json({ message: 'Invalid JSON format in request body.' }, { status: 400 });
     }
-    
-    return NextResponse.json({ message: 'An unexpected error occurred during sign up.' }, { status: 500 });
+    const message = error.code === 'DB_ERROR' ? 'A database error occurred during sign up.' : error.message;
+    return NextResponse.json({ message: `An unexpected error occurred during sign up. ${message}` }, { status: 500 });
+  } finally {
+    // queryBuilder itself handles releasing its main connection in its methods.
   }
 }

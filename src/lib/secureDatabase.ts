@@ -190,10 +190,20 @@ export class SecureQueryBuilder {
   /**
    * SECURITY FIX: Secure select query with parameter validation
    */
+// Define filter types
+type FilterOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte';
+interface FilterCondition {
+  operator: FilterOperator;
+  value: any;
+}
+type FilterValue = any | FilterCondition;
+
+// ... (rest of the class definition)
+
   async secureSelect(
     table: string,
     columns: string | string[],
-    filters: Record<string, any> = {},
+    filters: Record<string, FilterValue> = {},
     options: {
       single?: boolean;
       limit?: number;
@@ -213,9 +223,38 @@ export class SecureQueryBuilder {
       let query = this.client.from(table).select(columnStr);
       
       // Apply filters securely
-      for (const [key, value] of Object.entries(filters)) {
+      for (const [key, filterItem] of Object.entries(filters)) {
         this.validateColumnName(key);
-        query = query.eq(key, value); // Supabase handles parameterization
+        if (typeof filterItem === 'object' && filterItem !== null && 'operator' in filterItem && 'value' in filterItem) {
+          const condition = filterItem as FilterCondition;
+          switch (condition.operator) {
+            case 'eq':
+              query = query.eq(key, condition.value);
+              break;
+            case 'neq':
+              query = query.neq(key, condition.value);
+              break;
+            case 'gt':
+              query = query.gt(key, condition.value);
+              break;
+            case 'gte':
+              query = query.gte(key, condition.value);
+              break;
+            case 'lt':
+              query = query.lt(key, condition.value);
+              break;
+            case 'lte':
+              query = query.lte(key, condition.value);
+              break;
+            default:
+              // Should not happen if types are correct, but good practice
+              console.warn(`[SecureQueryBuilder] Unknown filter operator: ${condition.operator}. Falling back to 'eq'.`);
+              query = query.eq(key, condition.value);
+          }
+        } else {
+          // Default to 'eq' for simple value filters
+          query = query.eq(key, filterItem);
+        }
       }
       
       // Apply options
@@ -376,7 +415,7 @@ export class SecureQueryBuilder {
    */
   async secureDelete(
     table: string,
-    filters: Record<string, any>,
+    filters: Record<string, FilterValue>,
     options: {
       returning?: string | string[];
     } = {}
@@ -392,9 +431,37 @@ export class SecureQueryBuilder {
       let query = this.client.from(table).delete();
       
       // Apply filters
-      for (const [key, value] of Object.entries(filters)) {
+      for (const [key, filterItem] of Object.entries(filters)) {
         this.validateColumnName(key);
-        query = query.eq(key, value);
+        if (typeof filterItem === 'object' && filterItem !== null && 'operator' in filterItem && 'value' in filterItem) {
+          const condition = filterItem as FilterCondition;
+          switch (condition.operator) {
+            case 'eq':
+              query = query.eq(key, condition.value);
+              break;
+            case 'neq':
+              query = query.neq(key, condition.value);
+              break;
+            case 'gt':
+              query = query.gt(key, condition.value);
+              break;
+            case 'gte':
+              query = query.gte(key, condition.value);
+              break;
+            case 'lt':
+              query = query.lt(key, condition.value);
+              break;
+            case 'lte':
+              query = query.lte(key, condition.value);
+              break;
+            default:
+              console.warn(`[SecureQueryBuilder] Unknown filter operator for delete: ${condition.operator}. Falling back to 'eq'.`);
+              query = query.eq(key, condition.value);
+          }
+        } else {
+          // Default to 'eq' for simple value filters
+          query = query.eq(key, filterItem);
+        }
       }
       
       // Handle returning clause separately

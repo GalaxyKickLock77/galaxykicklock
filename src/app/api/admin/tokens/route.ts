@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateAdminSession } from '@/lib/adminAuth';
 import crypto from 'crypto'; // Import crypto module
+import { SecureQueryBuilder } from '@/lib/secureDatabase'; // Import SecureQueryBuilder
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // No longer needed
+// const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // No longer needed
 
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  console.error('Supabase URL or Service Role Key is missing for /api/admin/tokens. Check environment variables.');
-}
-// Supabase client will be initialized within handlers using the service role key.
+// if (!supabaseUrl || !supabaseServiceRoleKey) { // Handled by SecureQueryBuilder
+//   console.error('Supabase URL or Service Role Key is missing for /api/admin/tokens. Check environment variables.');
+// }
 
 // Server-side token generation logic using crypto for security
 const generateTokenString = (length: number = 16): string => {
@@ -24,17 +23,14 @@ const generateTokenString = (length: number = 16): string => {
 
 // POST: Generate a new token
 export async function POST(request: NextRequest) {
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
-  }
-  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-  const adminSession = await validateAdminSession(request);
-  if (!adminSession) {
-    return NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
-  }
-
+  let queryBuilder: SecureQueryBuilder;
   try {
+    queryBuilder = await SecureQueryBuilder.create('service');
+    const adminSession = await validateAdminSession(request);
+    if (!adminSession) {
+      return NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
+    }
+
     const { duration } = await request.json();
 
     if (!duration || !['3month', '6month', '1year'].includes(duration)) {
@@ -57,51 +53,54 @@ export async function POST(request: NextRequest) {
             break;
     }
     
-    const { data: insertedData, error: insertError } = await supabase
-      .from('tokengenerate')
-      .insert([
-        {
-          token: newTokenString,
-          duration: duration,
-          status: 'Active',
-          createdat: createdat,
-          expiresat: expiresat.toISOString(),
-        },
-      ])
-      .select()
-      .single();
+    const tokenPayload = {
+      token: newTokenString,
+      duration: duration,
+      status: 'Active',
+      createdat: createdat,
+      expiresat: expiresat.toISOString(),
+    };
+
+    const { data: insertedResult, error: insertError } = await queryBuilder.secureInsert(
+      'tokengenerate',
+      tokenPayload,
+      { returning: '*' } // Return all columns for the new token
+    );
 
     if (insertError) {
       console.error('Error inserting new token:', insertError.message);
-      throw insertError;
+      // Consider checking insertError.code for specific DB errors if needed
+      return NextResponse.json({ message: `Failed to generate token: ${insertError.message}` }, { status: 500 });
     }
     
-    if (!insertedData) {
+    const actualInsertedData = Array.isArray(insertedResult) && insertedResult.length > 0 ? insertedResult[0] : null;
+
+    if (!actualInsertedData) {
         console.error('Token insertion did not return data.');
         return NextResponse.json({ message: 'Failed to generate token (no data returned after insert).' }, { status: 500 });
     }
 
-    return NextResponse.json(insertedData, { status: 201 });
+    return NextResponse.json(actualInsertedData, { status: 201 });
 
   } catch (error: any) {
     console.error('Error in /api/admin/tokens POST route:', error.message);
-    return NextResponse.json({ message: 'Failed to generate token.', error: error.message }, { status: 500 });
+    const message = error.code === 'DB_ERROR' ? 'A database error occurred.' : error.message;
+    return NextResponse.json({ message: `Failed to generate token. ${message}` }, { status: 500 });
+  } finally {
+    // queryBuilder's connection is managed internally.
   }
 }
 
 // DELETE: Delete a token by its ID
 export async function DELETE(request: NextRequest) {
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
-  }
-  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-  const adminSession = await validateAdminSession(request);
-  if (!adminSession) {
-    return NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
-  }
-
+  let queryBuilder: SecureQueryBuilder;
   try {
+    queryBuilder = await SecureQueryBuilder.create('service');
+    const adminSession = await validateAdminSession(request);
+    if (!adminSession) {
+      return NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const tokenId = searchParams.get('tokenId');
 
@@ -109,20 +108,23 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: 'tokenId query parameter is required.' }, { status: 400 });
     }
 
-    const { error: deleteError } = await supabase
-      .from('tokengenerate')
-      .delete()
-      .eq('id', tokenId);
+    const { error: deleteError } = await queryBuilder.secureDelete(
+      'tokengenerate',
+      { id: tokenId }
+    );
 
     if (deleteError) {
       console.error('Error deleting token from DB:', deleteError.message);
-      throw deleteError;
+      return NextResponse.json({ message: `Failed to delete token: ${deleteError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ message: 'Token deleted successfully.' }, { status: 200 });
 
   } catch (error: any) {
     console.error('Error in /api/admin/tokens DELETE route:', error.message);
-    return NextResponse.json({ message: 'Failed to delete token.', error: error.message }, { status: 500 });
+    const message = error.code === 'DB_ERROR' ? 'A database error occurred.' : error.message;
+    return NextResponse.json({ message: `Failed to delete token. ${message}` }, { status: 500 });
+  } finally {
+    // queryBuilder's connection is managed internally.
   }
 }

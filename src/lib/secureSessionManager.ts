@@ -4,9 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// import { createClient, SupabaseClient } from '@supabase/supabase-js'; // createClient no longer used directly
 import crypto from 'crypto';
 import { securityCrypto } from './securityUtils';
+import { SecureQueryBuilder } from './secureDatabase'; // Import SecureQueryBuilder
+import { dbQueryCache } from './cacheManager'; // Import the shared cache instance
 
 // Session security configuration
 const SESSION_CONFIG = {
@@ -64,18 +66,18 @@ export interface SessionValidationResult {
  * SECURITY FIX: Secure Session Manager Class
  */
 export class SecureSessionManager {
-  private supabase: SupabaseClient;
+  // private supabase: SupabaseClient; // Removed
 
-  constructor() {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // constructor() { // Removed
+  //   const supabaseUrl = process.env.SUPABASE_URL;
+  //   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      throw new Error('Supabase configuration missing for secure session management');
-    }
+  //   if (!supabaseUrl || !supabaseServiceRoleKey) {
+  //     throw new Error('Supabase configuration missing for secure session management');
+  //   }
     
-    this.supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-  }
+  //   this.supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+  // }
 
   /**
    * SECURITY FIX: Generates cryptographically secure session tokens
@@ -176,25 +178,25 @@ export class SecureSessionManager {
 
     // Store encrypted session in database
     const encryptedData = this.encryptSessionData(sessionData);
+    const queryBuilder = await SecureQueryBuilder.create('service');
     
-    const { error } = await this.supabase
-      .from('secure_sessions')
-      .insert({
-        session_id: sessionId,
-        user_id: userId,
-        user_type: userType,
-        session_data: encryptedData,
-        expires_at: sessionData.expiresAt.toISOString(),
-        created_at: now.toISOString(),
-        last_accessed_at: now.toISOString(),
-        ip_address: sessionData.ipAddress,
-        user_agent: sessionData.userAgent,
-        fingerprint: fingerprint,
-        privilege_level: privilegeLevel,
-      });
+    const { error } = await queryBuilder.secureInsert('secure_sessions', {
+      session_id: sessionId,
+      user_id: userId,
+      user_type: userType,
+      session_data: encryptedData,
+      expires_at: sessionData.expiresAt.toISOString(),
+      created_at: now.toISOString(),
+      last_accessed_at: now.toISOString(),
+      ip_address: sessionData.ipAddress,
+      user_agent: sessionData.userAgent,
+      fingerprint: fingerprint,
+      privilege_level: privilegeLevel,
+    });
 
     if (error) {
-      throw new Error(`Failed to create secure session: ${error.message}`);
+      console.error('SecureSessionManager.createSession DB Error:', error);
+      throw new Error(`Failed to create secure session: ${error.message || 'Database operation failed'}`);
     }
 
     // SECURITY FIX: Invalidate any existing sessions for this user (prevent session fixation)
@@ -215,16 +217,20 @@ export class SecureSessionManager {
     }
 
     try {
+      const queryBuilder = await SecureQueryBuilder.create('service');
       // Retrieve session from database
-      const { data: sessionRecord, error } = await this.supabase
-        .from('secure_sessions')
-        .select('*')
-        .eq('session_id', sessionId)
-        .eq('is_active', true)
-        .single();
+      const { data: sessionRecord, error } = await queryBuilder.secureSelect(
+        'secure_sessions',
+        '*',
+        { session_id: sessionId, is_active: true },
+        { single: true }
+      );
 
       if (error || !sessionRecord) {
-        return { isValid: false, error: 'Session not found' };
+        if (error && error.code !== 'PGRST116') { // PGRST116: "Searched for a single row, but found no rows"
+          console.error('SecureSessionManager.validateSession DB Error:', error);
+        }
+        return { isValid: false, error: 'Session not found or inactive' };
       }
 
       // Decrypt session data
@@ -268,15 +274,19 @@ export class SecureSessionManager {
    * SECURITY FIX: Rotates session tokens (prevents session fixation)
    */
   async rotateSession(sessionId: string, privilegeEscalation: boolean = false): Promise<SecureSessionData> {
-    const { data: sessionRecord, error } = await this.supabase
-      .from('secure_sessions')
-      .select('*')
-      .eq('session_id', sessionId)
-      .eq('is_active', true)
-      .single();
+    const queryBuilder = await SecureQueryBuilder.create('service');
+    const { data: sessionRecord, error } = await queryBuilder.secureSelect(
+      'secure_sessions',
+      '*',
+      { session_id: sessionId, is_active: true },
+      { single: true }
+    );
 
     if (error || !sessionRecord) {
-      throw new Error('Session not found for rotation');
+      if (error && error.code !== 'PGRST116') {
+        console.error('SecureSessionManager.rotateSession DB Error (select):', error);
+      }
+      throw new Error('Active session not found for rotation');
     }
 
     const oldSessionData: SecureSessionData = this.decryptSessionData(sessionRecord.session_data);
@@ -307,26 +317,26 @@ export class SecureSessionManager {
 
     // Store new session
     const encryptedData = this.encryptSessionData(newSessionData);
+    // queryBuilder is already defined from the select operation earlier in this method.
     
-    const { error: insertError } = await this.supabase
-      .from('secure_sessions')
-      .insert({
-        session_id: newSessionId,
-        user_id: oldSessionData.userId,
-        user_type: oldSessionData.userType,
-        session_data: encryptedData,
-        expires_at: newSessionData.expiresAt.toISOString(),
-        created_at: oldSessionData.createdAt.toISOString(),
-        last_accessed_at: now.toISOString(),
-        ip_address: oldSessionData.ipAddress,
-        user_agent: oldSessionData.userAgent,
-        fingerprint: oldSessionData.fingerprint,
-        privilege_level: oldSessionData.privilegeLevel,
-        rotated_from: sessionId,
-      });
+    const { error: insertError } = await queryBuilder.secureInsert('secure_sessions', {
+      session_id: newSessionId,
+      user_id: oldSessionData.userId,
+      user_type: oldSessionData.userType,
+      session_data: encryptedData,
+      expires_at: newSessionData.expiresAt.toISOString(),
+      created_at: oldSessionData.createdAt.toISOString(), // Keep original creation time
+      last_accessed_at: now.toISOString(),
+      ip_address: oldSessionData.ipAddress,
+      user_agent: oldSessionData.userAgent,
+      fingerprint: oldSessionData.fingerprint,
+      privilege_level: oldSessionData.privilegeLevel,
+      rotated_from: sessionId, // Link to the old session
+    });
 
     if (insertError) {
-      throw new Error(`Failed to create rotated session: ${insertError.message}`);
+      console.error('SecureSessionManager.rotateSession DB Error (insert):', insertError);
+      throw new Error(`Failed to create rotated session: ${insertError.message || 'Database operation failed'}`);
     }
 
     // Invalidate old session
@@ -350,14 +360,21 @@ export class SecureSessionManager {
     
     // Update in database
     const encryptedData = this.encryptSessionData(rotatedSession);
+    const queryBuilder = await SecureQueryBuilder.create('service'); // New builder for this operation
     
-    await this.supabase
-      .from('secure_sessions')
-      .update({
+    const { error: updateError } = await queryBuilder.secureUpdate(
+      'secure_sessions',
+      {
         session_data: encryptedData,
         privilege_level: newPrivilegeLevel,
-      })
-      .eq('session_id', rotatedSession.sessionId);
+      },
+      { session_id: rotatedSession.sessionId }
+    );
+
+    if (updateError) {
+      console.error('SecureSessionManager.escalatePrivileges DB Error:', updateError);
+      // Decide if we should throw or try to revert rotation. For now, log and proceed with rotated session data.
+    }
 
     return rotatedSession;
   }
@@ -366,27 +383,41 @@ export class SecureSessionManager {
    * SECURITY FIX: Invalidates a specific session
    */
   async invalidateSession(sessionId: string): Promise<void> {
-    await this.supabase
-      .from('secure_sessions')
-      .update({ is_active: false, invalidated_at: new Date().toISOString() })
-      .eq('session_id', sessionId);
+    const queryBuilder = await SecureQueryBuilder.create('service');
+    const { error } = await queryBuilder.secureUpdate(
+      'secure_sessions',
+      { is_active: false, invalidated_at: new Date().toISOString() },
+      { session_id: sessionId }
+    );
+    if (error) {
+      console.error(`SecureSessionManager.invalidateSession DB Error for ${sessionId}:`, error);
+      // Potentially throw, but original code did not.
+    }
   }
 
   /**
    * SECURITY FIX: Invalidates all sessions for a user (except current)
    */
   async invalidateUserSessions(userId: string, exceptSessionId?: string): Promise<void> {
-    let query = this.supabase
-      .from('secure_sessions')
-      .update({ is_active: false, invalidated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('is_active', true);
+    const queryBuilder = await SecureQueryBuilder.create('service');
+    const filters: Record<string, any | {operator: string, value: any}> = {
+      user_id: userId,
+      is_active: true
+    };
 
     if (exceptSessionId) {
-      query = query.neq('session_id', exceptSessionId);
+      filters.session_id = { operator: 'neq', value: exceptSessionId };
     }
 
-    await query;
+    const { error } = await queryBuilder.secureUpdate(
+      'secure_sessions',
+      { is_active: false, invalidated_at: new Date().toISOString() },
+      filters
+    );
+    if (error) {
+      console.error(`SecureSessionManager.invalidateUserSessions DB Error for user ${userId}:`, error);
+      // Potentially throw.
+    }
   }
 
   /**
@@ -442,10 +473,16 @@ export class SecureSessionManager {
    * Updates session last accessed time
    */
   private async updateSessionAccess(sessionId: string): Promise<void> {
-    await this.supabase
-      .from('secure_sessions')
-      .update({ last_accessed_at: new Date().toISOString() })
-      .eq('session_id', sessionId);
+    const queryBuilder = await SecureQueryBuilder.create('service');
+    const { error } = await queryBuilder.secureUpdate(
+      'secure_sessions',
+      { last_accessed_at: new Date().toISOString() },
+      { session_id: sessionId }
+    );
+    if (error) {
+      console.error(`SecureSessionManager.updateSessionAccess DB Error for ${sessionId}:`, error);
+      // Non-critical, but log it.
+    }
   }
 
   /**
@@ -471,28 +508,61 @@ export class SecureSessionManager {
     lastLoginAt: Date | null;
     suspiciousActivity: boolean;
   }> {
-    const { data: sessions } = await this.supabase
-      .from('secure_sessions')
-      .select('*')
-      .eq('user_id', userId);
+  const cacheKey = `session_stats_${userId}`;
+  // Define the expected structure of the cached stats object for type safety
+  type SessionStats = { // Defined SessionStats type here as per instructions
+    activeSessions: number;
+    totalSessions: number;
+    lastLoginAt: Date | null;
+    suspiciousActivity: boolean;
+  };
+  const cachedStats = dbQueryCache.get<SessionStats>(cacheKey);
 
-    if (!sessions) {
-      return {
+  if (cachedStats) {
+    console.log(`[CACHE HIT] SecureSessionManager.getSessionStats for user: ${userId}`);
+    return cachedStats;
+  }
+  console.log(`[CACHE MISS] SecureSessionManager.getSessionStats for user: ${userId}`);
+
+    const queryBuilder = await SecureQueryBuilder.create('service');
+    // Fetch only necessary columns: is_active for activeSessions, created_at for lastLoginAt and recentSessions
+    const { data: sessionsFromDb, error } = await queryBuilder.secureSelect(
+      'secure_sessions',
+      ['is_active', 'created_at'],
+      { user_id: userId }
+    );
+
+    if (error) {
+      console.error(`SecureSessionManager.getSessionStats DB Error for user ${userId}:`, error);
+      const defaultErrorStats: SessionStats = {
+        activeSessions: 0,
+        totalSessions: 0,
+        lastLoginAt: null,
+        suspiciousActivity: true, // Mark as suspicious if stats can't be fetched
+      };
+      dbQueryCache.set(cacheKey, defaultErrorStats); // Cache error/default state to prevent repeated failing lookups
+      return defaultErrorStats;
+    }
+
+    if (!sessionsFromDb || sessionsFromDb.length === 0) {
+      const defaultEmptyStats: SessionStats = {
         activeSessions: 0,
         totalSessions: 0,
         lastLoginAt: null,
         suspiciousActivity: false,
       };
+      dbQueryCache.set(cacheKey, defaultEmptyStats); // Cache default stats for empty results
+      return defaultEmptyStats;
     }
 
-    const activeSessions = sessions.filter(s => s.is_active).length;
-    const totalSessions = sessions.length;
-    const lastLoginAt = sessions.length > 0 
-      ? new Date(Math.max(...sessions.map(s => new Date(s.created_at).getTime())))
+    const activeSessions = sessionsFromDb.filter(s => s.is_active).length;
+    const totalSessions = sessionsFromDb.length;
+    const lastLoginAt = sessionsFromDb.length > 0
+      ? new Date(Math.max(...sessionsFromDb.map(s => new Date(s.created_at).getTime())))
       : null;
 
     // Check for suspicious activity (multiple active sessions, rapid session creation)
-    const recentSessions = sessions.filter(s => {
+    const recentSessions = sessionsFromDb.filter(s => {
       const createdAt = new Date(s.created_at);
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       return createdAt > oneHourAgo;
@@ -500,12 +570,14 @@ export class SecureSessionManager {
 
     const suspiciousActivity = activeSessions > 3 || recentSessions.length > 5;
 
-    return {
+    const statsToCache: SessionStats = {
       activeSessions,
       totalSessions,
       lastLoginAt,
       suspiciousActivity,
     };
+    dbQueryCache.set(cacheKey, statsToCache);
+    return statsToCache;
   }
 }
 

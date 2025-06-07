@@ -5,6 +5,7 @@
 
 import { SecureQueryBuilder, DatabaseSecurity } from './secureDatabase';
 import { secureLog } from './secureLogger';
+import { dbQueryCache } from './cacheManager'; // Import the shared cache instance
 
 /**
  * SECURITY FIX: Secure database operations for user management
@@ -193,10 +194,19 @@ export class SecureAdminDatabase {
     limit: number = 50,
     offset: number = 0
   ): Promise<{ data: any; error: any }> {
+    const cacheKey = `admin_getUsers_limit_${limit}_offset_${offset}`;
+    const cachedResult = dbQueryCache.get<{ data: any; error: any }>(cacheKey);
+
+    if (cachedResult) {
+      secureLog.debug(`[CACHE HIT] SecureAdminDatabase.getUsers for key: ${cacheKey}`, {}, 'SecureAdminDatabase');
+      return cachedResult;
+    }
+    secureLog.debug(`[CACHE MISS] SecureAdminDatabase.getUsers for key: ${cacheKey}`, {}, 'SecureAdminDatabase');
+
     try {
       const queryBuilder = await SecureQueryBuilder.create('service');
       
-      return await queryBuilder.secureSelect(
+      const result = await queryBuilder.secureSelect(
         'users',
         ['id', 'username', 'created_at', 'last_login', 'login_count', 'token_removed'],
         {},
@@ -206,6 +216,11 @@ export class SecureAdminDatabase {
           orderBy: { column: 'created_at', ascending: false }
         }
       );
+
+      if (!result.error && result.data) {
+        dbQueryCache.set(cacheKey, result);
+      }
+      return result;
     } catch (error) {
       secureLog.error('Admin user listing failed', error, 'SecureAdminDatabase');
       return {
@@ -222,10 +237,19 @@ export class SecureAdminDatabase {
     limit: number = 50,
     offset: number = 0
   ): Promise<{ data: any; error: any }> {
+    const cacheKey = `admin_getTokens_limit_${limit}_offset_${offset}`;
+    const cachedResult = dbQueryCache.get<{ data: any; error: any }>(cacheKey);
+
+    if (cachedResult) {
+      secureLog.debug(`[CACHE HIT] SecureAdminDatabase.getTokens for key: ${cacheKey}`, {}, 'SecureAdminDatabase');
+      return cachedResult;
+    }
+    secureLog.debug(`[CACHE MISS] SecureAdminDatabase.getTokens for key: ${cacheKey}`, {}, 'SecureAdminDatabase');
+
     try {
       const queryBuilder = await SecureQueryBuilder.create('service');
       
-      return await queryBuilder.secureSelect(
+      const result = await queryBuilder.secureSelect(
         'tokengenerate',
         ['id', 'token', 'userid', 'status', 'expires_at', 'created_at'],
         {},
@@ -235,6 +259,11 @@ export class SecureAdminDatabase {
           orderBy: { column: 'created_at', ascending: false }
         }
       );
+
+      if (!result.error && result.data) {
+        dbQueryCache.set(cacheKey, result);
+      }
+      return result;
     } catch (error) {
       secureLog.error('Admin token listing failed', error, 'SecureAdminDatabase');
       return {

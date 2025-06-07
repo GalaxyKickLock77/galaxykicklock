@@ -1,35 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateSession, updateUserLogoutTimestamp } from '@/lib/auth'; // Import updateUserLogoutTimestamp
+import { SecureQueryBuilder } from '@/lib/secureDatabase'; // Import SecureQueryBuilder
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // No longer needed here
+// const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // No longer needed here
 
-if (!supabaseUrl) {
-  console.error('Supabase URL is missing for /api/auth/signout. Check environment variables.');
-}
+// if (!supabaseUrl) { // Handled by SecureQueryBuilder
+//   console.error('Supabase URL is missing for /api/auth/signout. Check environment variables.');
+// }
 
 export async function POST(request: NextRequest) {
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
-  }
+  // validateSession and updateUserLogoutTimestamp will use their own db connections or be refactored later.
+  // SecureQueryBuilder is for direct DB operations in this file.
 
-  const supabaseService: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-  const session = await validateSession(request);
+  const session = await validateSession(request); // This call remains as is for now
   if (!session || !session.userId) {
     return NextResponse.json({ message: 'No active session to sign out or authentication invalid.' }, { status: 401 });
   }
 
+  let queryBuilder: SecureQueryBuilder;
   try {
+    queryBuilder = await SecureQueryBuilder.create('service');
+
     // Invalidate session token and active session ID
-    const { error: updateSessionError } = await supabaseService
-      .from("users")
-      .update({
+    const { error: updateSessionError } = await queryBuilder.secureUpdate(
+      "users",
+      {
         session_token: null,
         active_session_id: null,
-      })
-      .eq("id", session.userId);
+      },
+      { id: session.userId }
+    );
 
     if (updateSessionError) {
       console.error('Failed to invalidate user session token/ID for signout in DB:', updateSessionError.message);
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     // Update the last_logout_at timestamp using the new function
     const logoutTimestamp = new Date().toISOString();
-    const logoutTimestampUpdated = await updateUserLogoutTimestamp(session.userId, logoutTimestamp);
+    const logoutTimestampUpdated = await updateUserLogoutTimestamp(session.userId, logoutTimestamp); // This call remains as is for now
 
     if (!logoutTimestampUpdated) {
       console.error('Failed to update last_logout timestamp during signout.'); // Changed last_logout_at to last_logout
@@ -67,6 +68,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error in sign-out API route:', error.message);
-    return NextResponse.json({ message: 'An unexpected error occurred during sign out.' }, { status: 500 });
+    const message = error.code === 'DB_ERROR' ? 'A database error occurred during sign out.' : error.message;
+    return NextResponse.json({ message: `An unexpected error occurred during sign out. ${message}` }, { status: 500 });
+  } finally {
+    // queryBuilder itself handles releasing its main connection in its methods, if it was initialized.
+    // No explicit release needed here as it's managed internally by secureUpdate.
   }
 }

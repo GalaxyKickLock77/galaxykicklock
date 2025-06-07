@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { validateUsername, validateRequestSize } from '@/lib/inputValidation'; // SECURITY FIX: Import validation utilities
+import { SecureQueryBuilder } from '@/lib/secureDatabase'; // Import SecureQueryBuilder
 
-const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Use server-side only URL
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// const supabaseUrl = process.env.SUPABASE_URL; // No longer needed here
+// const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // No longer needed here
 
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  console.error('Supabase URL or Service Role Key is missing for /api/admin/auth/signin. Check environment variables.');
-}
+// if (!supabaseUrl || !supabaseServiceRoleKey) { // Handled by SecureQueryBuilder
+//   console.error('Supabase URL or Service Role Key is missing for /api/admin/auth/signin. Check environment variables.');
+// }
 
 const generateSessionId = (): string => {
   return crypto.randomUUID();
@@ -35,12 +35,11 @@ export async function POST(request: NextRequest) {
   // CSRF protection - Removed strict XMLHttpRequest header check to prevent blocking legitimate requests.
   // Other CSRF protections (e.g., SameSite=Strict cookies) are still in place.
 
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
-  }
-  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+  // SecureQueryBuilder will handle its own configuration checks.
+  let queryBuilder: SecureQueryBuilder;
 
   try {
+    queryBuilder = await SecureQueryBuilder.create('service');
     const requestData = await request.json();
 
     // SECURITY FIX: Enhanced input validation
@@ -67,20 +66,25 @@ export async function POST(request: NextRequest) {
     // SECURITY FIX: Input sanitization (removed .toLowerCase() for case-sensitive usernames)
     const sanitizedUsername = username.trim();
 
-    const { data: adminUser, error: dbError } = await supabase
-      .from("admin")
-      .select("id, username, password")
-      .eq("username", sanitizedUsername) // Use sanitized username
-      .single();
+    const { data: adminUser, error: dbError } = await queryBuilder.secureSelect(
+      "admin",
+      ["id", "username", "password"],
+      { username: sanitizedUsername },
+      { single: true }
+    );
 
-    if (dbError) {
-      console.error("Error querying admin database:", dbError.message);
+    if (dbError || !adminUser) {
+      // PGRST116 is "Searched for a single row, but found no rows"
+      const errorMessage = dbError?.code === 'PGRST116' ? "Invalid username or password." : (dbError?.message || "Database query failed.");
+      if (dbError?.code !== 'PGRST116') { // Log only if it's not a simple "not found"
+          console.error("Error querying admin database:", errorMessage);
+      }
       return NextResponse.json({ message: "Invalid username or password." }, { status: 401 });
     }
 
-    if (!adminUser) {
-      return NextResponse.json({ message: "Invalid username or password." }, { status: 401 });
-    }
+    // if (!adminUser) { // This check is now combined with dbError check above
+    //   return NextResponse.json({ message: "Invalid username or password." }, { status: 401 });
+    // }
 
     const passwordIsValid = await bcrypt.compare(password, adminUser.password);
     if (!passwordIsValid) {
@@ -95,14 +99,15 @@ export async function POST(request: NextRequest) {
     const sessionExpiresAt = new Date(Date.now() + oneDayInSeconds * 1000).toISOString(); // Renamed expiresAt to sessionExpiresAt
 
     // Store session directly in the admin table
-    const { error: sessionUpdateError } = await supabase
-      .from('admin') // Update the admin table
-      .update({
+    const { error: sessionUpdateError } = await queryBuilder.secureUpdate(
+      "admin",
+      {
         session_id: adminSessionId,
         session_token: adminSessionToken,
-        session_expires_at: sessionExpiresAt, // New column name
-      })
-      .eq('id', adminUser.id); // Update for the specific admin user
+        session_expires_at: sessionExpiresAt,
+      },
+      { id: adminUser.id }
+    );
 
     if (sessionUpdateError) {
       console.error('Failed to update admin session in DB:', sessionUpdateError.message);
@@ -131,6 +136,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error in admin sign-in API route:', error.message);
-    return NextResponse.json({ message: 'An unexpected error occurred during admin login.' }, { status: 500 });
+    // SecureQueryBuilder might throw its own errors if not caught internally
+    const message = error.code === 'DB_ERROR' ? 'A database error occurred.' : error.message;
+    return NextResponse.json({ message: `An unexpected error occurred during admin login. ${message}` }, { status: 500 });
+  } finally {
+    // queryBuilder itself handles releasing its main connection in its methods.
   }
 }
