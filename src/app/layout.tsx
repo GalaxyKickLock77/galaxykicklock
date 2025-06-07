@@ -9,6 +9,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { createClient } from '@supabase/supabase-js'; // Import Supabase client
+import HeaderProgressBar from '../components/HeaderProgressBar';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -44,6 +45,7 @@ export default function RootLayout({
 }>) {
   const [showAdminBlockPopup, setShowAdminBlockPopup] = useState(false);
   const [isDeployed, setIsDeployed] = useState(false);
+  const [showHeaderProgress, setShowHeaderProgress] = useState(false);
   const router = useRouter();
 
   // Function to fetch session details and update isDeployed state
@@ -212,11 +214,35 @@ export default function RootLayout({
     }
   }, [fetchDeploymentStatus, handleStaleSession, pathname]); // Removed updateCurrentTabSessionId from dependencies
 
+  // Function to handle deployment progress completion
+  const handleProgressComplete = useCallback(() => {
+    setShowHeaderProgress(false);
+    fetchDeploymentStatus(); // Refresh deployment status
+  }, [fetchDeploymentStatus]);
+
+  // Listen for deployment events (you can trigger this from your existing deploy button)
+  useEffect(() => {
+    const handleDeploymentStart = () => {
+      setShowHeaderProgress(true);
+    };
+
+    // Add event listeners for deployment events
+    window.addEventListener('deploymentStart', handleDeploymentStart);
+
+    return () => {
+      window.removeEventListener('deploymentStart', handleDeploymentStart);
+    };
+  }, []);
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${bungee.variable} antialiased`}
       >
+        <HeaderProgressBar 
+          isVisible={showHeaderProgress} 
+          onComplete={handleProgressComplete}
+        />
         <ToastContainer />
         {children}
         {/* The popup is now controlled by the toast messages, but keeping this for specific admin/token messages if needed */}
