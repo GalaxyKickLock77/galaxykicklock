@@ -874,6 +874,54 @@ const GalaxyForm: React.FC = () => {
       return;
     }
 
+    // RC validation logic
+    if (action === 'start') {
+      const allRcs = new Set<string>();
+      let hasDuplicate = false;
+      let duplicateMessage = '';
+
+      const allFormDatas = [formData1, formData2, formData3, formData4, formData5];
+
+      // Check for duplicates within the current form
+      if (formData.RC1 && formData.RC2 && formData.RC1 === formData.RC2) {
+        setError(['RC1', 'RC2']);
+        setToastMessage("Same RC should not be used, please use another RC in that appropriate field.");
+        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+        return;
+      }
+
+      // Check for duplicates across all forms
+      for (let i = 0; i < allFormDatas.length; i++) {
+        const currentForm = allFormDatas[i];
+        const currentFormNumber = i + 1;
+
+        if (currentForm.RC1) {
+          if (allRcs.has(currentForm.RC1)) {
+            hasDuplicate = true;
+            duplicateMessage = `RC1 value '${currentForm.RC1}' in Kick ${currentFormNumber} is already used in another form.`;
+            setError(prev => [...prev, 'RC1']); // Highlight RC1 in the current form
+            break;
+          }
+          allRcs.add(currentForm.RC1);
+        }
+        if (currentForm.RC2) {
+          if (allRcs.has(currentForm.RC2)) {
+            hasDuplicate = true;
+            duplicateMessage = `RC2 value '${currentForm.RC2}' in Kick ${currentFormNumber} is already used in another form.`;
+            setError(prev => [...prev, 'RC2']); // Highlight RC2 in the current form
+            break;
+          }
+          allRcs.add(currentForm.RC2);
+        }
+      }
+
+      if (hasDuplicate) {
+        setToastMessage(`Same RC should not be used, please use another RC in that appropriate field. ${duplicateMessage}`);
+        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+        return;
+      }
+    }
+
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError([]);
     const authHeaders = getApiAuthHeaders();
@@ -1149,13 +1197,16 @@ const GalaxyForm: React.FC = () => {
               )}
             </span>
           </button>
-          <button
-            onClick={() => setShowDiscordTooltip(!showDiscordTooltip)}
+          <a
+            href="https://discord.gg/your-invite-link" // Placeholder: Replace with actual Discord invite link
+            target="_blank"
+            rel="noopener noreferrer"
             className={styles.headerButton}
-            aria-label="Reach out on Discord"
+            aria-label="Join us on Discord"
+            style={{ textDecoration: 'none', color: 'inherit' }}
           >
             <MessageSquare size={16} />
-          </button>
+          </a>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
             <LogOut size={16} />
             <span>Logout</span>
