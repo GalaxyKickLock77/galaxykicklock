@@ -69,6 +69,8 @@ const GalaxyForm: React.FC = () => {
   const [showLoadingBar, setShowLoadingBar] = useState<boolean>(false);
   const [loadingBarProgress, setLoadingBarProgress] = useState<number>(0);
   const [showProfilePopup, setShowProfilePopup] = useState<boolean>(false);
+  const [showDiscordQrNotification, setShowDiscordQrNotification] = useState<boolean>(false);
+  const [discordQrMessage, setDiscordQrMessage] = useState<string>('');
 
   const findRunIdTimerRef = useRef<number | null>(null);
   const statusPollTimerRef = useRef<number | null>(null);
@@ -874,6 +876,54 @@ const GalaxyForm: React.FC = () => {
       return;
     }
 
+    // RC validation logic
+    if (action === 'start') {
+      const allRcs = new Set<string>();
+      let hasDuplicate = false;
+      let duplicateMessage = '';
+
+      const allFormDatas = [formData1, formData2, formData3, formData4, formData5];
+
+      // Check for duplicates within the current form
+      if (formData.RC1 && formData.RC2 && formData.RC1 === formData.RC2) {
+        setError(['RC1', 'RC2']);
+        setToastMessage("Same RC should not be used, please use another RC in that appropriate field.");
+        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+        return;
+      }
+
+      // Check for duplicates across all forms
+      for (let i = 0; i < allFormDatas.length; i++) {
+        const currentForm = allFormDatas[i];
+        const currentFormNumber = i + 1;
+
+        if (currentForm.RC1) {
+          if (allRcs.has(currentForm.RC1)) {
+            hasDuplicate = true;
+            duplicateMessage = `RC1 value '${currentForm.RC1}' in Kick ${currentFormNumber} is already used in another form.`;
+            setError(prev => [...prev, 'RC1']); // Highlight RC1 in the current form
+            break;
+          }
+          allRcs.add(currentForm.RC1);
+        }
+        if (currentForm.RC2) {
+          if (allRcs.has(currentForm.RC2)) {
+            hasDuplicate = true;
+            duplicateMessage = `RC2 value '${currentForm.RC2}' in Kick ${currentFormNumber} is already used in another form.`;
+            setError(prev => [...prev, 'RC2']); // Highlight RC2 in the current form
+            break;
+          }
+          allRcs.add(currentForm.RC2);
+        }
+      }
+
+      if (hasDuplicate) {
+        setToastMessage(`Same RC should not be used, please use another RC in that appropriate field. ${duplicateMessage}`);
+        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+        return;
+      }
+    }
+
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError([]);
     const authHeaders = getApiAuthHeaders();
@@ -1150,11 +1200,14 @@ const GalaxyForm: React.FC = () => {
             </span>
           </button>
           <button
-            onClick={() => setShowDiscordTooltip(!showDiscordTooltip)}
+            onClick={() => {
+              setShowDiscordQrNotification(true);
+              setDiscordQrMessage("Scan this QR code to connect with GalaxyKickLock on Discord!");
+            }}
             className={styles.headerButton}
             aria-label="Reach out on Discord"
           >
-            <MessageSquare size={16} />
+            <img src="/images/discord_qr.png" alt="Discord QR" style={{ width: '16px', height: '16px' }} />
           </button>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
             <LogOut size={16} />
@@ -1339,6 +1392,30 @@ const GalaxyForm: React.FC = () => {
             <div className={styles.popupActions}>
               <button
                 onClick={() => setShowProfilePopup(false)}
+                className={styles.popupCloseButton}
+                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDiscordQrNotification && (
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '300px' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#7289DA' }}>
+              Connect on Discord!
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px' }}>
+              <img src="/images/discord_qr.png?v=1" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
+              <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.9em' }}>{discordQrMessage}</span>
+            </div>
+            <div className={styles.popupActions}>
+              <button
+                onClick={() => setShowDiscordQrNotification(false)}
                 className={styles.popupCloseButton}
                 style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
                 onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
