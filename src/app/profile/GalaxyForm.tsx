@@ -1203,14 +1203,6 @@ const GalaxyForm: React.FC = () => {
             onClick={() => {
               setShowDiscordQrNotification(true);
               setDiscordQrMessage("Scan this QR code to connect with GalaxyKickLock on Discord!");
-              setTimeout(() => {
-                setShowDiscordQrNotification(false);
-                setDiscordQrMessage('');
-              }, 7000); // Hide after 7 seconds
-              setTimeout(() => {
-                setShowDiscordQrNotification(false);
-                setDiscordQrMessage('');
-              }, 7000); // Hide after 7 seconds
             }}
             className={styles.headerButton}
             aria-label="Reach out on Discord"
@@ -1412,12 +1404,27 @@ const GalaxyForm: React.FC = () => {
         </div>
       )}
       {showDiscordQrNotification && (
-        <div className={styles.toastMessage} style={{ bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px', backgroundColor: '#2c3e50', border: '1px solid #34495e', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', maxWidth: '80px' }}>
-          <img src="/images/discord_qr.png?v=1" alt="Discord QR Code" style={{ width: '40px', height: '40px', marginBottom: '0px' }} />
-          <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.7em' }}>{discordQrMessage}</span>
-          <button onClick={() => setShowDiscordQrNotification(false)} className={styles.toastCloseButton} style={{ position: 'absolute', top: '5px', right: '5px' }}>
-            <X size={16} />
-          </button>
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '300px' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#7289DA' }}>
+              Connect on Discord!
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px' }}>
+              <img src="/images/discord_qr.png?v=1" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
+              <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.9em' }}>{discordQrMessage}</span>
+            </div>
+            <div className={styles.popupActions}>
+              <button
+                onClick={() => setShowDiscordQrNotification(false)}
+                className={styles.popupCloseButton}
+                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
