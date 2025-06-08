@@ -65,6 +65,7 @@ const GalaxyForm: React.FC = () => {
   const [showDiscordTooltip, setShowDiscordTooltip] = useState<boolean>(false);
   const [showNotificationBell, setShowNotificationBell] = useState<boolean>(false);
   const [newFeaturesMessage, setNewFeaturesMessage] = useState<string>('');
+  const [queuedRetryCount, setQueuedRetryCount] = useState<number>(0);
   const [showNewFeaturesPopup, setShowNewFeaturesPopup] = useState<boolean>(false);
   const [showLoadingBar, setShowLoadingBar] = useState<boolean>(false);
   const [loadingBarProgress, setLoadingBarProgress] = useState<number>(0);
@@ -664,6 +665,23 @@ const GalaxyForm: React.FC = () => {
             }
           }, 1000);
           setActivationProgressTimerId(newActivationTimerId);
+          setQueuedRetryCount(0); // Reset retry count on successful activation
+        } else if (runDetails.status === 'queued') {
+          if (queuedRetryCount < 2) { // 0, 1, 2 for 3 retries
+            setQueuedRetryCount(prev => prev + 1);
+            setDeploymentStatus(`Deployment queued. Retrying... (Attempt ${queuedRetryCount + 1}/3)`);
+            statusPollTimerRef.current = window.setTimeout(performStatusPoll, 5000); // Retry after 5 seconds
+          } else {
+            // Max retries reached for 'queued' status
+            if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
+            statusPollTimerRef.current = null;
+            setDeploymentStatus('Deployment stuck in queued status after multiple retries. Cancelling deployment. Please redeploy.');
+            setIsDeployed(false);
+            setIsPollingStatus(false);
+            setRedeployMode(true);
+            setShowLoadingBar(false);
+            handleUndeploy(); // This will attempt to cancel the run
+          }
         } else {
           if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
           statusPollTimerRef.current = null;
@@ -672,6 +690,7 @@ const GalaxyForm: React.FC = () => {
           setIsPollingStatus(false);
           setRedeployMode(true);
           setShowLoadingBar(false); // Hide if not in_progress
+          setQueuedRetryCount(0); // Reset for other statuses
         }
       } catch (pollError) {
         if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
@@ -681,10 +700,11 @@ const GalaxyForm: React.FC = () => {
         setIsPollingStatus(false);
         setRedeployMode(true);
         setShowLoadingBar(false); // Hide on error
+        setQueuedRetryCount(0); // Reset on error
       }
     };
     statusPollTimerRef.current = window.setTimeout(performStatusPoll, 0);
-  }, [setDeploymentStatus, setIsDeployed, setRedeployMode, setIsPollingStatus, setActivationProgressPercent, setActivationProgressTimerId, setShowDeployPopup, setShowLoadingBar, setLoadingBarProgress]);
+  }, [setDeploymentStatus, setIsDeployed, setRedeployMode, setIsPollingStatus, setActivationProgressPercent, setActivationProgressTimerId, setShowDeployPopup, setShowLoadingBar, setLoadingBarProgress, queuedRetryCount, handleUndeploy]);
 
   const startDeploymentCheck = useCallback(async (suffixedUsernameForJobSearch: string | null) => {
     if (!suffixedUsernameForJobSearch) {
@@ -1412,6 +1432,9 @@ const GalaxyForm: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px' }}>
               <img src="/images/discord_qr.png?v=1" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
               <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.9em' }}>{discordQrMessage}</span>
+              <a href="https://discord.gg/sYqMVEYs" target="_blank" rel="noopener noreferrer" style={{ color: '#7289DA', textDecoration: 'underline', marginTop: '10px', fontSize: '0.9em' }}>
+                Join our Discord!
+              </a>
             </div>
             <div className={styles.popupActions}>
               <button
@@ -1431,4 +1454,3 @@ const GalaxyForm: React.FC = () => {
   );
 };
 export default GalaxyForm;
-
