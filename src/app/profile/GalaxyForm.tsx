@@ -69,6 +69,8 @@ const GalaxyForm: React.FC = () => {
   const [showLoadingBar, setShowLoadingBar] = useState<boolean>(false);
   const [loadingBarProgress, setLoadingBarProgress] = useState<number>(0);
   const [showProfilePopup, setShowProfilePopup] = useState<boolean>(false);
+  const [showDiscordQrNotification, setShowDiscordQrNotification] = useState<boolean>(false);
+  const [discordQrMessage, setDiscordQrMessage] = useState<string>('');
 
   const findRunIdTimerRef = useRef<number | null>(null);
   const statusPollTimerRef = useRef<number | null>(null);
@@ -1197,16 +1199,20 @@ const GalaxyForm: React.FC = () => {
               )}
             </span>
           </button>
-          <a
-            href="https://discord.gg/your-invite-link" // Placeholder: Replace with actual Discord invite link
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => {
+              setShowDiscordQrNotification(true);
+              setDiscordQrMessage("Scan this QR code to connect with GalaxyKickLock on Discord!");
+              setTimeout(() => {
+                setShowDiscordQrNotification(false);
+                setDiscordQrMessage('');
+              }, 7000); // Hide after 7 seconds
+            }}
             className={styles.headerButton}
-            aria-label="Join us on Discord"
-            style={{ textDecoration: 'none', color: 'inherit' }}
+            aria-label="Reach out on Discord"
           >
             <MessageSquare size={16} />
-          </a>
+          </button>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`}>
             <LogOut size={16} />
             <span>Logout</span>
@@ -1399,6 +1405,15 @@ const GalaxyForm: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {showDiscordQrNotification && (
+        <div className={styles.toastMessage} style={{ bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '15px', backgroundColor: '#2c3e50', border: '1px solid #34495e', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', maxWidth: '250px' }}>
+          <img src="/images/discord_qr.png" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
+          <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.9em' }}>{discordQrMessage}</span>
+          <button onClick={() => setShowDiscordQrNotification(false)} className={styles.toastCloseButton} style={{ position: 'absolute', top: '5px', right: '5px' }}>
+            <X size={16} />
+          </button>
         </div>
       )}
     </div>
