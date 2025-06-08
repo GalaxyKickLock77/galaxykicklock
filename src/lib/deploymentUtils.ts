@@ -79,7 +79,7 @@ export async function performServerSideUndeploy(
         
         secureLog.info(`Server-side undeploy call to ${stopUrl} completed for user ${userId}`, userId, 'performServerSideUndeploy');
       } catch (fetchError) {
-        secureLog.error(`Error during server-side undeploy fetch for ${stopUrl}`, userId, 'performServerSideUndeploy', fetchError);
+        secureLog.error(`Error during server-side undeploy fetch for ${stopUrl} for user ${userId}`, fetchError, 'performServerSideUndeploy');
         // Continue with database update even if fetch fails
       }
     }
@@ -97,14 +97,14 @@ export async function performServerSideUndeploy(
           secureLog.warn(`Failed to cancel GitHub Actions run ${activeRunId} for user ${userId}: ${cancelResult.message}`, userId, 'performServerSideUndeploy');
         }
       } catch (cancelError) {
-        secureLog.error(`Error cancelling GitHub Actions run ${activeRunId} for user ${userId}`, userId, 'performServerSideUndeploy', cancelError);
+        secureLog.error(`Error cancelling GitHub Actions run ${activeRunId} for user ${userId}`, cancelError, 'performServerSideUndeploy');
       }
     }
 
     return { success: true, message: 'Server-side undeploy completed successfully' };
     
   } catch (error) {
-    secureLog.error('Error in performServerSideUndeploy', userId, 'performServerSideUndeploy', error);
+    secureLog.error(`Error in performServerSideUndeploy for user ${userId}`, error, 'performServerSideUndeploy');
     return { success: false, message: 'Server-side undeploy failed' };
   }
 }
@@ -132,7 +132,7 @@ export async function cancelGitHubRun(runId: number | string): Promise<{ success
       return { success: false, message: `Failed to cancel run: ${response.status} ${errorData.message || ''}` };
     }
   } catch (error) {
-    secureLog.error('Error cancelling GitHub Actions run', null, 'cancelGitHubRun', error);
+    secureLog.error('Error cancelling GitHub Actions run', error, 'cancelGitHubRun');
     return { success: false, message: 'Error cancelling GitHub Actions run' };
   }
 }
@@ -161,7 +161,7 @@ export async function getGitHubRunStatus(runId: number | string): Promise<GitHub
       return null;
     }
   } catch (error) {
-    secureLog.error('Error getting GitHub Actions run status', null, 'getGitHubRunStatus', error);
+    secureLog.error('Error getting GitHub Actions run status', error, 'getGitHubRunStatus');
     return null;
   }
 }
