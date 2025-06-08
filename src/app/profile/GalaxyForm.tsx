@@ -1413,7 +1413,7 @@ const GalaxyForm: React.FC = () => {
       )}
       {showDiscordQrNotification && (
         <div className={styles.toastMessage} style={{ bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '15px', backgroundColor: '#2c3e50', border: '1px solid #34495e', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', maxWidth: '250px' }}>
-          <img src="/images/discord_qr.png" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
+          <img src="/src/public/images/discord_qr.png?v=1" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
           <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.9em' }}>{discordQrMessage}</span>
           <button onClick={() => setShowDiscordQrNotification(false)} className={styles.toastCloseButton} style={{ position: 'absolute', top: '5px', right: '5px' }}>
             <X size={16} />
