@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { performServerSideUndeploy } from '@/lib/deploymentUtils';
+import { validateUsername, validatePassword, validateRequestSize } from '@/lib/inputValidation'; // SECURITY FIX: Import validation utilities
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,15 +12,83 @@ if (!supabaseUrl) {
   console.error('Database URL is missing for /api/auth/signin. Check environment variables.');
 }
 
-// In-memory map to store login attempts for rate limiting
-// Key: username, Value: Array of timestamps (Date.now())
-const loginAttempts = new Map<string, number[]>();
+// SECURITY FIX: Database-backed rate limiting configuration
 const COOLDOWN_SECONDS = 30; // Minimum wait time after logout
 const MAX_ATTEMPTS_PER_MINUTE = 3; // Max login attempts within a minute
 const BLOCK_DURATION_MS = 60 * 1000; // 1 minute block if rate limit exceeded
 
+/**
+ * SECURITY FIX: Database-backed rate limiting function
+ * Stores and checks login attempts in Supabase for persistence across server restarts
+ * and compatibility with multiple server instances
+ */
+async function checkRateLimit(username: string, supabaseService: any): Promise<{ allowed: boolean; timeLeftToWait: number }> {
+  const currentTime = Date.now();
+  const oneMinuteAgo = new Date(currentTime - BLOCK_DURATION_MS).toISOString();
+  
+  try {
+    // Clean up old attempts (older than 1 minute)
+    await supabaseService
+      .from('login_attempts')
+      .delete()
+      .lt('attempted_at', oneMinuteAgo);
+
+    // Get recent attempts for this username
+    const { data: recentAttempts, error } = await supabaseService
+      .from('login_attempts')
+      .select('attempted_at')
+      .eq('username', username)
+      .gte('attempted_at', oneMinuteAgo)
+      .order('attempted_at', { ascending: false });
+
+    if (error) {
+      console.error('Error checking rate limit:', error.message);
+      // Allow request if we can't check rate limit (fail open for availability)
+      return { allowed: true, timeLeftToWait: 0 };
+    }
+
+    const attemptCount = recentAttempts?.length || 0;
+    
+    if (attemptCount >= MAX_ATTEMPTS_PER_MINUTE) {
+      const lastAttemptTime = new Date(recentAttempts[0].attempted_at).getTime();
+      const timeSinceLastAttempt = currentTime - lastAttemptTime;
+      const timeLeftToWait = Math.max(0, BLOCK_DURATION_MS - timeSinceLastAttempt);
+      
+      if (timeLeftToWait > 0) {
+        return { allowed: false, timeLeftToWait };
+      }
+    }
+
+    return { allowed: true, timeLeftToWait: 0 };
+  } catch (error: any) {
+    console.error('Exception in rate limit check:', error.message);
+    // Allow request if we can't check rate limit (fail open for availability)
+    return { allowed: true, timeLeftToWait: 0 };
+  }
+}
+
+/**
+ * SECURITY FIX: Record login attempt in database
+ */
+async function recordLoginAttempt(username: string, supabaseService: any): Promise<void> {
+  try {
+    await supabaseService
+      .from('login_attempts')
+      .insert({
+        username: username,
+        attempted_at: new Date().toISOString(),
+        ip_address: null // Could be enhanced to include IP if needed
+      });
+  } catch (error: any) {
+    console.error('Error recording login attempt:', error.message);
+    // Non-critical error, don't block the login process
+  }
+}
+
 const generateSessionToken = (): string => {
-  return crypto.randomBytes(32).toString('hex') + Date.now().toString(36);
+  // SECURITY FIX: Use only cryptographically secure random bytes
+  // 48 bytes = 384 bits of entropy, provides excellent security
+  return crypto.randomBytes(48).toString('hex');
 };
 
 const generateSessionId = (): string => {
@@ -27,6 +96,44 @@ const generateSessionId = (): string => {
 };
 
 export async function POST(request: NextRequest) {
+  // TARGETED SECURITY FIX: Filter unnecessary cookies from signin request
+  const originalCookieHeader = request.headers.get('cookie') || '';
+  if (originalCookieHeader) {
+    // Import cookie filtering utility
+    const { createFilteredCookieHeader } = await import('@/lib/cookieHeaderFilter');
+    
+    // Create filtered cookie header (removes sensitive and development cookies)
+    const filteredCookieHeader = createFilteredCookieHeader(originalCookieHeader, 'signin');
+    
+    // Log the filtering for monitoring (optional)
+    console.log(`[SIGNIN SECURITY] Cookie filtering applied:`, {
+      originalLength: originalCookieHeader.length,
+      filteredLength: filteredCookieHeader.length,
+      bytesRemoved: originalCookieHeader.length - filteredCookieHeader.length
+    });
+    
+    // Create new headers with filtered cookies
+    const newHeaders = new Headers(request.headers);
+    if (filteredCookieHeader) {
+      newHeaders.set('cookie', filteredCookieHeader);
+    } else {
+      newHeaders.delete('cookie');
+    }
+
+    // Create new request with filtered headers
+    request = new NextRequest(request.url, {
+      method: request.method,
+      headers: newHeaders,
+      body: request.body,
+    });
+  }
+
+  // SECURITY FIX: Validate request size
+  const sizeValidation = validateRequestSize(request);
+  if (!sizeValidation.isValid) {
+    return NextResponse.json({ message: sizeValidation.error }, { status: 413 }); // 413 Payload Too Large
+  }
+
   const origin = request.headers.get('origin');
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   
@@ -42,34 +149,44 @@ export async function POST(request: NextRequest) {
   const supabaseService: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
-    const { username, password } = await request.json();
+    const requestData = await request.json();
 
-    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
-      return NextResponse.json({ message: 'Username and password are required.' }, { status: 400 });
+    // SECURITY FIX: Enhanced input validation
+    const { username, password } = requestData;
+
+    // Validate username (less strict for existing users)
+    if (!username || typeof username !== 'string') {
+      return NextResponse.json({ message: 'Username is required.' }, { status: 400 });
+    }
+    
+    if (username.trim().length === 0 || username.trim().length > 50) {
+      return NextResponse.json({ message: 'Invalid username format.' }, { status: 400 });
+    }
+
+    // Validate password (basic validation for signin - don't enforce complexity on existing passwords)
+    if (!password || typeof password !== 'string') {
+      return NextResponse.json({ message: 'Password is required.' }, { status: 400 });
+    }
+    
+    if (password.length > 128) { // Prevent extremely long passwords that could cause DoS
+      return NextResponse.json({ message: 'Password is too long.' }, { status: 400 });
     }
 
     const sanitizedUsername = username.trim().toLowerCase();
-    if (sanitizedUsername.length > 50 || password.length > 128) {
-      return NextResponse.json({ message: 'Invalid input length.' }, { status: 400 });
+
+    // SECURITY FIX: Database-backed rate limiting
+    const rateLimitCheck = await checkRateLimit(sanitizedUsername, supabaseService);
+    if (!rateLimitCheck.allowed) {
+      console.warn(`Rate limit exceeded for user (masked). Blocking for ${rateLimitCheck.timeLeftToWait / 1000}s.`);
+      return NextResponse.json({ 
+        message: `Too many login attempts. Please try again in ${Math.ceil(rateLimitCheck.timeLeftToWait / 1000)} seconds.` 
+      }, { status: 429 });
     }
 
-    const currentTime = Date.now();
+    // Record this login attempt
+    await recordLoginAttempt(sanitizedUsername, supabaseService);
 
-    // --- Rate Limiting Logic ---
-    let attempts = loginAttempts.get(sanitizedUsername) || [];
-    // Filter out attempts older than 1 minute
-    attempts = attempts.filter(timestamp => currentTime - timestamp < BLOCK_DURATION_MS);
-
-    if (attempts.length >= MAX_ATTEMPTS_PER_MINUTE) {
-      const timeSinceLastAttempt = currentTime - attempts[attempts.length - 1];
-      const timeLeftToWait = Math.max(0, BLOCK_DURATION_MS - timeSinceLastAttempt);
-      if (timeLeftToWait > 0) {
-        console.warn(`Rate limit exceeded for user (masked). Blocking for ${timeLeftToWait / 1000}s.`);
-        return NextResponse.json({ message: `Too many login attempts. Please try again in ${Math.ceil(timeLeftToWait / 1000)} seconds.` }, { status: 429 });
-      }
-    }
-    attempts.push(currentTime);
-    loginAttempts.set(sanitizedUsername, attempts);
+    const currentTime = Date.now(); // SECURITY FIX: Add currentTime back for logout cooldown check
 
     const { data: user, error: authError } = await supabaseService
       .from("users")
@@ -197,6 +314,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error in sign-in API route:', error.message);
+    
+    // SECURITY FIX: Handle JSON parsing errors specifically
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ message: 'Invalid JSON format in request body.' }, { status: 400 });
+    }
+    
     return NextResponse.json({ message: 'An unexpected error occurred during sign in.' }, { status: 500 });
   }
 }

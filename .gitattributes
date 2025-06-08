@@ -1,0 +1,6 @@
+q/bin/q filter=lfs diff=lfs merge=lfs -text
+q/bin/qchat filter=lfs diff=lfs merge=lfs -text
+q/bin/qterm filter=lfs diff=lfs merge=lfs -text
+q.zip filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text
+q/* filter=lfs diff=lfs merge=lfs -text

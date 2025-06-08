@@ -48,18 +48,21 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ message: 'Sign out successful on server.' }, { status: 200 });
 
-    // Clear the cookies
+    // Clear the session cookies
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict' as const,
       path: '/',
-      maxAge: -1, // Expire the cookie immediately
+      expires: new Date(0), // Expire immediately
     };
+
     response.cookies.set('sessionToken', '', cookieOptions);
     response.cookies.set('sessionId', '', cookieOptions);
     response.cookies.set('userId', '', cookieOptions);
     response.cookies.set('username', '', cookieOptions);
 
+    console.log('User session cookies cleared.');
     return response;
 
   } catch (error: any) {

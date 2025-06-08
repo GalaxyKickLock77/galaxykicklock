@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import { validateUsername, validateRequestSize } from '@/lib/inputValidation'; // SECURITY FIX: Import validation utilities
 
 const supabaseUrl = process.env.SUPABASE_URL; // SECURITY FIX: Use server-side only URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -15,10 +16,18 @@ const generateSessionId = (): string => {
 };
 
 const generateSessionToken = (): string => {
-  return crypto.randomBytes(32).toString('hex');
+  // SECURITY FIX: Use only cryptographically secure random bytes
+  // 48 bytes = 384 bits of entropy, provides excellent security
+  return crypto.randomBytes(48).toString('hex');
 };
 
 export async function POST(request: NextRequest) {
+  // SECURITY FIX: Validate request size
+  const sizeValidation = validateRequestSize(request);
+  if (!sizeValidation.isValid) {
+    return NextResponse.json({ message: sizeValidation.error }, { status: 413 }); // 413 Payload Too Large
+  }
+
   // SECURITY FIX: Add security headers and validations
   const origin = request.headers.get('origin');
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
@@ -32,18 +41,31 @@ export async function POST(request: NextRequest) {
   const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
-    const { username, password } = await request.json();
+    const requestData = await request.json();
 
     // SECURITY FIX: Enhanced input validation
-    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
-      return NextResponse.json({ message: 'Username and password are required.' }, { status: 400 });
+    const { username, password } = requestData;
+
+    // Validate username (less strict for existing users)
+    if (!username || typeof username !== 'string') {
+      return NextResponse.json({ message: 'Username is required.' }, { status: 400 });
+    }
+    
+    if (username.trim().length === 0 || username.trim().length > 50) {
+      return NextResponse.json({ message: 'Invalid username format.' }, { status: 400 });
+    }
+
+    // Validate password (basic validation for signin)
+    if (!password || typeof password !== 'string') {
+      return NextResponse.json({ message: 'Password is required.' }, { status: 400 });
+    }
+    
+    if (password.length > 128) { // Prevent extremely long passwords that could cause DoS
+      return NextResponse.json({ message: 'Password is too long.' }, { status: 400 });
     }
 
     // SECURITY FIX: Input sanitization (removed .toLowerCase() for case-sensitive usernames)
     const sanitizedUsername = username.trim();
-    if (sanitizedUsername.length > 50 || password.length > 128) {
-      return NextResponse.json({ message: 'Invalid input length.' }, { status: 400 });
-    }
 
     const { data: adminUser, error: dbError } = await supabase
       .from("admin")

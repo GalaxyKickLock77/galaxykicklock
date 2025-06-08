@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     };
 
     response.cookies.set('adminSessionId', '', cookieOptions);
-    response.cookies.set('adminSessionToken', '', cookieOptions); // Clear the new token cookie
+    response.cookies.set('adminSessionToken', '', cookieOptions);
     response.cookies.set('adminId', '', cookieOptions);
     response.cookies.set('adminUsername', '', cookieOptions);
 

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { validateSession as validateUserSession } from '@/lib/auth'; 
-import { validateAdminSession } from '@/lib/adminAuth';
+import { validateEnhancedSession, validateEnhancedAdminSession } from '@/lib/enhancedAuth'; // SECURITY FIX: Use enhanced auth
+import { addSecurityHeaders } from '@/lib/securityHeaders';
+import { validateRequestSize } from '@/lib/requestSizeMiddleware';
 
 // Define paths that are public (don't require authentication)
 const PUBLIC_PATHS = [
@@ -15,6 +16,13 @@ const PUBLIC_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // SECURITY FIX: Validate request size for all requests
+  const sizeValidation = validateRequestSize(request);
+  if (!sizeValidation.isValid) {
+    const response = NextResponse.json({ message: sizeValidation.error }, { status: 413 });
+    return addSecurityHeaders(response, pathname); // SECURITY FIX: Re-enabled with path-aware headers
+  }
+
   // Allow requests to Next.js internals, static files, and public auth API routes
   if (
     pathname.startsWith('/_next/') ||
@@ -22,58 +30,72 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/admin/auth/signin') || // Public admin sign-in API
     pathname.includes('.') // Simple check for files like favicon.ico, images, etc.
   ) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    return addSecurityHeaders(response, pathname); // SECURITY FIX: Re-enabled with path-aware headers
   }
   
   // Check if the path is explicitly public (e.g., /signin, /signup, /admin/signin pages)
   if (PUBLIC_PATHS.some(path => pathname === path)) { // Use strict equality for specific pages
-    return NextResponse.next();
+    const response = NextResponse.next();
+    return addSecurityHeaders(response, pathname); // SECURITY FIX: Re-enabled with path-aware headers
   }
 
   // Handle Admin routes
   if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
-    const adminSession = await validateAdminSession(request); // Reads from admin cookies
+    const adminSession = await validateEnhancedAdminSession(request); // SECURITY FIX: Use enhanced admin session validation
     if (!adminSession) {
       if (pathname.startsWith('/api/admin')) {
-        return NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
+        const response = NextResponse.json({ message: 'Admin authentication required.' }, { status: 401 });
+        return addSecurityHeaders(response, pathname);
       }
       // Redirect to admin sign-in page (which is /admin)
       const adminSignInUrl = new URL('/admin', request.url); 
       adminSignInUrl.searchParams.set('redirectedFrom', pathname);
-      return NextResponse.redirect(adminSignInUrl);
+      const response = NextResponse.redirect(adminSignInUrl);
+      return addSecurityHeaders(response, pathname);
     }
+    
+    // SECURITY FIX: Handle session upgrade if needed
+    if (adminSession.needsUpgrade) {
+      console.log('Admin session needs security upgrade');
+      // The session will be upgraded automatically on next request
+    }
+    
     // Admin session is valid. 
     // If the admin is trying to access the login page (/admin) itself while already logged in,
     // we should redirect them to the dashboard.
     if (pathname === '/admin') {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+      const response = NextResponse.redirect(new URL('/admin/dashboard', request.url));
+      return addSecurityHeaders(response, pathname);
     }
     // Otherwise, proceed
-    // Optionally add admin data to headers if needed by admin API routes
-    // const requestHeaders = new Headers(request.headers);
-    // requestHeaders.set('X-Admin-Session', JSON.stringify(adminSession));
-    // return NextResponse.next({ request: { headers: requestHeaders } });
-    return NextResponse.next();
+    const response = NextResponse.next();
+    return addSecurityHeaders(response, pathname);
   }
 
   // For all other non-admin protected paths, validate the regular user session
-  const userSession = await validateUserSession(request); // Reads from user cookies
+  const userSession = await validateEnhancedSession(request); // SECURITY FIX: Use enhanced user session validation
   if (!userSession) {
     if (pathname.startsWith('/api/')) { // For other API routes (e.g., /api/git)
-      return NextResponse.json({ message: 'User authentication required.' }, { status: 401 });
+      const response = NextResponse.json({ message: 'User authentication required.' }, { status: 401 });
+      return addSecurityHeaders(response, pathname);
     }
     // Redirect to regular user sign-in page
     const signInUrl = new URL('/signin', request.url);
     signInUrl.searchParams.set('redirectedFrom', pathname);
-    return NextResponse.redirect(signInUrl);
+    const response = NextResponse.redirect(signInUrl);
+    return addSecurityHeaders(response, pathname);
+  }
+
+  // SECURITY FIX: Handle session upgrade if needed
+  if (userSession.needsUpgrade) {
+    console.log('User session needs security upgrade');
+    // The session will be upgraded automatically on next request
   }
 
   // User session is valid, proceed
-  // Optionally add user data to headers
-  // const requestHeaders = new Headers(request.headers);
-  // requestHeaders.set('X-User-Session', JSON.stringify(userSession));
-  // return NextResponse.next({ request: { headers: requestHeaders } });
-  return NextResponse.next();
+  const response = NextResponse.next();
+  return addSecurityHeaders(response, pathname);
 }
 
 export const config = {
