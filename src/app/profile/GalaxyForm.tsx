@@ -1207,6 +1207,10 @@ const GalaxyForm: React.FC = () => {
                 setShowDiscordQrNotification(false);
                 setDiscordQrMessage('');
               }, 7000); // Hide after 7 seconds
+              setTimeout(() => {
+                setShowDiscordQrNotification(false);
+                setDiscordQrMessage('');
+              }, 7000); // Hide after 7 seconds
             }}
             className={styles.headerButton}
             aria-label="Reach out on Discord"
