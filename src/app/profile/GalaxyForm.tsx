@@ -1432,6 +1432,9 @@ const GalaxyForm: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px' }}>
               <img src="/images/discord_qr.png?v=1" alt="Discord QR Code" style={{ width: '150px', height: '150px', marginBottom: '10px' }} />
               <span style={{ color: '#fff', textAlign: 'center', fontSize: '0.9em' }}>{discordQrMessage}</span>
+              <a href="https://discord.gg/sYqMVEYs" target="_blank" rel="noopener noreferrer" style={{ color: '#7289DA', textDecoration: 'underline', marginTop: '10px', fontSize: '0.9em' }}>
+                Join our Discord!
+              </a>
             </div>
             <div className={styles.popupActions}>
               <button
