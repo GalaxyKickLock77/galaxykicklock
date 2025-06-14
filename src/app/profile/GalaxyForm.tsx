@@ -25,6 +25,7 @@ type FormData = {
   standOnEnemy: boolean;
   actionOnEnemy: boolean;
   aiChatToggle: boolean;
+  dualRCToggle: boolean;
 };
 
 type ButtonState = { loading: boolean; active: boolean; text: string; };
@@ -72,6 +73,8 @@ const GalaxyForm: React.FC = () => {
   const [showProfilePopup, setShowProfilePopup] = useState<boolean>(false);
   const [showDiscordQrNotification, setShowDiscordQrNotification] = useState<boolean>(false);
   const [discordQrMessage, setDiscordQrMessage] = useState<string>('');
+  const [showNotesPopup, setShowNotesPopup] = useState<boolean>(false);
+  const [notesContent, setNotesContent] = useState<string>('');
 
   const findRunIdTimerRef = useRef<number | null>(null);
   const statusPollTimerRef = useRef<number | null>(null);
@@ -113,7 +116,8 @@ const GalaxyForm: React.FC = () => {
       RC2_stopDefenceTime: '',
       standOnEnemy: false,
       actionOnEnemy: false,
-      aiChatToggle: false
+      aiChatToggle: false,
+      dualRCToggle: false
     };
   };
 
@@ -504,6 +508,19 @@ const GalaxyForm: React.FC = () => {
   useEffect(() => {
     if (!isClient || !username) return;
 
+    // Load notes from local storage
+    const userSpecificNotesKey = `${STORAGE_KEYS.FORMS_DATA}_${username}_notes`;
+    const savedNotes = localStorage.getItem(userSpecificNotesKey);
+    if (savedNotes) {
+      setNotesContent(savedNotes);
+    } else {
+      setNotesContent(''); // Reset if no saved notes for this user
+    }
+  }, [isClient, username]);
+
+  useEffect(() => {
+    if (!isClient || !username) return;
+
     const userSpecificKey = `${STORAGE_KEYS.FORMS_DATA}_${username}`;
     const savedData = localStorage.getItem(userSpecificKey);
     if (savedData) {
@@ -844,6 +861,19 @@ const GalaxyForm: React.FC = () => {
     }
   }, [formData1, formData2, formData3, formData4, formData5, saveAllFormDataToLocalStorage, username]);
 
+  const saveNotesToLocalStorage = useCallback(() => {
+    if (typeof window !== 'undefined' && username) {
+      const userSpecificNotesKey = `${STORAGE_KEYS.FORMS_DATA}_${username}_notes`;
+      localStorage.setItem(userSpecificNotesKey, notesContent);
+    }
+  }, [notesContent, username]);
+
+  useEffect(() => {
+    if (username) {
+      saveNotesToLocalStorage();
+    }
+  }, [notesContent, saveNotesToLocalStorage, username]);
+
   const handleInputChange = (formNumber: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
@@ -866,23 +896,32 @@ const GalaxyForm: React.FC = () => {
     const formData = formDatas[formNumber - 1];
     const requiredFields: (keyof FormData)[] = [
       'RC1',
-      'RC2',
       'RC1_startAttackTime',
       'RC1_stopAttackTime',
       'RC1_attackIntervalTime',
       'RC1_startDefenceTime',
       'RC1_stopDefenceTime',
       'RC1_defenceIntervalTime',
+      'PlanetName',
+      'Rival'
+    ];
+
+    const rc2Fields: (keyof FormData)[] = [
+      'RC2',
       'RC2_startAttackTime',
       'RC2_stopAttackTime',
       'RC2_attackIntervalTime',
       'RC2_startDefenceTime',
       'RC2_stopDefenceTime',
-      'RC2_defenceIntervalTime',
-      'PlanetName',
-      'Rival'
+      'RC2_defenceIntervalTime'
     ];
-    const emptyFields = requiredFields.filter(field => !formData[field]);
+
+    let fieldsToCheck = [...requiredFields];
+    if (formData.dualRCToggle) {
+      fieldsToCheck = [...fieldsToCheck, ...rc2Fields];
+    }
+
+    const emptyFields = fieldsToCheck.filter(field => !formData[field]);
     if (emptyFields.length > 0) {
       setError(emptyFields);
       setToastMessage(`Please fill all highlighted fields.`);
@@ -904,8 +943,8 @@ const GalaxyForm: React.FC = () => {
 
       const allFormDatas = [formData1, formData2, formData3, formData4, formData5];
 
-      // Check for duplicates within the current form
-      if (formData.RC1 && formData.RC2 && formData.RC1 === formData.RC2) {
+      // Check for duplicates within the current form only if dual RC is enabled
+      if (formData.dualRCToggle && formData.RC1 && formData.RC2 && formData.RC1 === formData.RC2) {
         setError(['RC1', 'RC2']);
         setToastMessage("Same RC should not be used, please use another RC in that appropriate field.");
         setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
@@ -926,7 +965,8 @@ const GalaxyForm: React.FC = () => {
           }
           allRcs.add(currentForm.RC1);
         }
-        if (currentForm.RC2) {
+        // Only check RC2 if dualRCToggle is enabled for that specific form
+        if (currentForm.dualRCToggle && currentForm.RC2) {
           if (allRcs.has(currentForm.RC2)) {
             hasDuplicate = true;
             duplicateMessage = `RC2 value '${currentForm.RC2}' in Kick ${currentFormNumber} is already used in another form.`;
@@ -954,6 +994,11 @@ const GalaxyForm: React.FC = () => {
         return;
       }
       const modifiedFormData = Object.entries(formData).reduce((acc, [key, value]) => {
+        // Only include RC2 related fields if dualRCToggle is true
+        const isRC2Field = key.startsWith('RC2') && key !== 'RC2';
+        if (isRC2Field && !formData.dualRCToggle) {
+          return acc;
+        }
         acc[`${key}${formNumber}`] = value.toString(); // Convert all values to strings for API
         return acc;
       }, {} as Record<string, string>);
@@ -1000,94 +1045,537 @@ const GalaxyForm: React.FC = () => {
     const currentFormData = [formData1, formData2, formData3, formData4, formData5][formNumber - 1];
     const currentButtonStates = [buttonStates1, buttonStates2, buttonStates3, buttonStates4, buttonStates5][formNumber - 1];
     const currentError = [error1, error2, error3, error4, error5][formNumber - 1];
-    const inputFields = [
+    const baseFields = [
       { key: 'RC1', label: 'RC1', placeholder: 'Enter RC1', color: '#FFFF00', type: 'text' },
-      { key: 'RC2', label: 'RC2', placeholder: 'Enter RC2', color: '#FFFF00', type: 'text' },
       { key: 'PlanetName', label: 'Planet Name', placeholder: 'Enter Planet', color: '#FFFFFF', type: 'text' },
+      { key: 'Rival', label: 'Rival', placeholder: 'Enter Rival', color: '#FFA500', type: 'text' },
       { key: 'RC1_startAttackTime', label: 'RC1 Start Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_attackIntervalTime', label: 'RC1 Attack Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_stopAttackTime', label: 'RC1 Stop Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_startDefenceTime', label: 'RC1 Start Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_defenceIntervalTime', label: 'RC1 Defence Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_stopDefenceTime', label: 'RC1 Stop Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
+      { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' },
+      { key: 'dualRCToggle', label: 'Dual RC', color: '#FFFFFF', type: 'checkbox' }
+    ];
+
+    const dualRCFields = [
+      { key: 'RC2', label: 'RC2', placeholder: 'Enter RC2', color: '#FFFF00', type: 'text' },
       { key: 'RC2_startAttackTime', label: 'RC2 Start Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC2_attackIntervalTime', label: 'RC2 Attack Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC2_stopAttackTime', label: 'RC2 Stop Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC2_startDefenceTime', label: 'RC2 Start Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC2_defenceIntervalTime', label: 'RC2 Defence Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC2_stopDefenceTime', label: 'RC2 Stop Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'Rival', label: 'Rival', placeholder: 'Enter Rival', color: '#FFA500', type: 'text' },
-      { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
-      { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' }
-      // aiChatToggle removed from here
     ];
 
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
-        <div className={styles.form}>
-          {inputFields.map(({ key, label, color, type, maxLength, className, placeholder }) => (
-            <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
-              <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
-              {type === 'checkbox' ? (
-                <div
-                  onClick={() => {
-                    const currentValue = currentFormData[key as keyof FormData] as boolean;
-                    const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
-                    setFormData(prev => ({ ...prev, [key]: !currentValue }));
-                    setToastMessage(null);
-                  }}
-                  style={{
-                    width: '40px',
-                    height: '24px',
-                    borderRadius: '12px',
-                    backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444', /* Red for active, darker grey for inactive */
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'background-color 0.2s',
-                    marginTop: '5px'
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '50%',
-                      backgroundColor: 'white',
-                      top: '2px',
-                      left: currentFormData[key as keyof FormData] ? '18px' : '2px',
-                      transition: 'left 0.2s',
-                    }}
-                  />
+        <div className={styles.form} style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          {currentFormData.dualRCToggle ? (
+            <>
+              {/* First Row: RC1, RC2, Planet Name, Rival */}
+              {[baseFields[0], dualRCFields[0], baseFields[1], baseFields[2]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
                 </div>
-              ) : (
-                <>
-                  <input
-                    type={type}
-                    name={key}
-                    value={currentFormData[key as keyof FormData] as string}
-                    onChange={handleInputChange(formNumber)}
-                    className={className || styles.input}
-                    maxLength={maxLength}
-                    autoComplete="off"
-                    onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
-                    placeholder={placeholder}
-                    style={{
-                      backgroundColor: '#2a2a2a',
-                      border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
-                      color: '#fff',
-                      WebkitTextFillColor: '#fff',
-                      width: '100%',
-                      padding: '0.5rem',
-                      boxSizing: 'border-box',
-                      boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
-                    }}
-                    title={currentError.includes(key) ? `${label} is required` : undefined}
-                  />
-                </>
-              )}
-            </div>
-          ))}
+              ))}
+              {/* Second Row: RC1 Attack Times + Stand On Enemy */}
+              {[baseFields[3], baseFields[4], baseFields[5], baseFields[9]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+              {/* Third Row: RC1 Defence Times + Action On Enemy */}
+              {[baseFields[6], baseFields[7], baseFields[8], baseFields[10]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+              {/* Fourth Row: RC2 Attack Times + Dual RC Toggle */}
+              {[dualRCFields[1], dualRCFields[2], dualRCFields[3], baseFields[11]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+              {/* Fifth Row: RC2 Defence Times */}
+              {[dualRCFields[4], dualRCFields[5], dualRCFields[6]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              {/* Original rendering logic for dualRCToggle false */}
+              {[baseFields[0], baseFields[1], baseFields[2], baseFields[9]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+              {/* Second Row */}
+              {[baseFields[3], baseFields[4], baseFields[5], baseFields[10]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+              {/* Third Row */}
+              {[baseFields[6], baseFields[7], baseFields[8], baseFields[11]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
+                  {type === 'checkbox' ? (
+                    <div
+                      onClick={() => {
+                        const currentValue = currentFormData[key as keyof FormData] as boolean;
+                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
+                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
+                        setToastMessage(null);
+                      }}
+                      style={{
+                        width: '40px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background-color 0.2s',
+                        marginTop: '5px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'white',
+                          top: '2px',
+                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={type}
+                      name={key}
+                      value={currentFormData[key as keyof FormData] as string}
+                      onChange={handleInputChange(formNumber)}
+                      className={className || styles.input}
+                      maxLength={maxLength}
+                      autoComplete="off"
+                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
+                      placeholder={placeholder}
+                      style={{
+                        backgroundColor: '#2a2a2a',
+                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
+                        color: '#fff',
+                        WebkitTextFillColor: '#fff',
+                        width: '100%',
+                        padding: '0.5rem',
+                        boxSizing: 'border-box',
+                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
+                      }}
+                      title={currentError.includes(key) ? `${label} is required` : undefined}
+                    />
+                  )}
+                </div>
+              ))}
+            </>
+          )}
           <div className={styles.buttonGroup}>
             <button
               type="button"
@@ -1199,6 +1687,14 @@ const GalaxyForm: React.FC = () => {
         </h1>
         <div>
           <button
+            onClick={() => setShowNotesPopup(true)}
+            className={styles.headerButton}
+            aria-label="Notes"
+          >
+            <MessageSquare size={16} />
+            <span>Notes</span>
+          </button>
+          <button
             onClick={() => setShowNewFeaturesPopup(true)}
             className={styles.headerButton}
             aria-label="New Features"
@@ -1291,12 +1787,12 @@ const GalaxyForm: React.FC = () => {
               ) : (isDeployed && !redeployMode && !isPollingStatus && activationProgressTimerId === null) ? (
                 <p className={styles.activeDeploymentText}>Deployment is active!</p>
               ) : null}
+              {(!isDeploying && activationProgressTimerId === null && !showTokenExpiredPopup) && (
+                <button onClick={() => setShowDeployPopup(false)} className={styles.popupCloseButton}>
+                  Close
+                </button>
+              )}
             </div>
-            {(!isDeploying && activationProgressTimerId === null && !showTokenExpiredPopup) && (
-              <button onClick={() => setShowDeployPopup(false)} className={styles.popupCloseButton}>
-                Close
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -1441,6 +1937,56 @@ const GalaxyForm: React.FC = () => {
                 onClick={() => setShowDiscordQrNotification(false)}
                 className={styles.popupCloseButton}
                 style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showNotesPopup && (
+        <div className={styles.popupOverlay}>
+          <div className={styles.popupContent} style={{ width: '500px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <h2 className={styles.popupTitle} style={{ color: '#00FFFF' }}>
+              My Notes
+            </h2>
+            <textarea
+              value={notesContent}
+              onChange={(e) => setNotesContent(e.target.value)}
+              placeholder="Write your notes here..."
+              style={{
+                width: '100%',
+                minHeight: '200px',
+                backgroundColor: '#2a2a2a',
+                border: '1px solid #444',
+                color: '#fff',
+                padding: '10px',
+                boxSizing: 'border-box',
+                borderRadius: '5px',
+                marginBottom: '15px',
+                resize: 'vertical'
+              }}
+            />
+            <div className={styles.popupActions} style={{ justifyContent: 'space-around', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  saveNotesToLocalStorage();
+                  setShowNotesPopup(false);
+                  setToastMessage('Notes saved successfully!');
+                }}
+                className={styles.popupActionButton}
+                style={{ backgroundColor: '#22c55e', flex: 'none', width: 'auto', padding: '8px 15px' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
+              >
+                Save Notes
+              </button>
+              <button
+                onClick={() => setShowNotesPopup(false)}
+                className={styles.popupCloseButton}
+                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 'none', width: 'auto', padding: '8px 15px' }}
                 onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
                 onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
               >

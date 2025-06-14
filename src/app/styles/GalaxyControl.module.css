@@ -51,14 +51,14 @@
 }
 
 .header > div:last-child {
-  width: 200px;
+  width: auto; /* Allow width to adjust based on content */
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px; /* Reduced gap between buttons */
 }
 
 .header .headerButton {
   background: transparent;
-  padding: 8px;
+  padding: 4px 6px; /* Reduced padding */
   border: none;
   color: white;
   cursor: pointer;
@@ -68,6 +68,7 @@
   border-radius: 4px;
   min-width: unset;
   box-shadow: none;
+  font-size: 0.8rem; /* Slightly reduced font size for text buttons */
 }
 
 .header .headerButton:hover {
@@ -255,11 +256,13 @@
   display: flex;
   justify-content: center;
   margin-top: 20px;
+  gap: 10px; /* Ensure consistent gap */
+  flex-wrap: wrap; /* Allow buttons to wrap if space is constrained */
 }
 
 .popupActionButton {
-  padding: 10px 20px;
-  border-radius: 4px;
+  padding: 10px 20px; /* Increased padding for a more substantial feel */
+  border-radius: 6px; /* Slightly more rounded corners */
   border: none;
   background-color: #e67e22;
   color: white;
@@ -267,13 +270,24 @@
   cursor: pointer;
   opacity: 1;
   transition: all 0.3s ease;
-  width: 100%;
+  flex: 1;
+  min-width: 140px; /* Increased min-width for better button size */
+  max-width: 200px; /* Increased max-width */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Added subtle shadow */
+}
+
+.popupActionButton:hover {
+  background-color: #d35400; /* Darker orange on hover */
+  transform: translateY(-1px); /* Slight lift effect */
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
 }
 
 .popupActionButton:disabled {
   background-color: #555;
   cursor: not-allowed;
   opacity: 0.7;
+  transform: none; /* No lift when disabled */
+  box-shadow: none;
 }
 
 .activeDeploymentText {
@@ -281,12 +295,26 @@
 }
 
 .popupCloseButton {
-  margin-top: 15px;
-  background: none;
-  border: 1px solid #555;
-  color: #aaa;
-  padding: 5px 10px;
-  border-radius: 4px;
+  margin-top: 0;
+  background-color: #333; /* Darker background for elegance */
+  border: 1px solid #555; /* Subtle border */
+  color: #ccc; /* Lighter text color */
+  padding: 10px 20px; /* Matched padding with action button */
+  border-radius: 6px; /* Matched border-radius */
+  flex: 1;
+  min-width: 140px; /* Matched min-width */
+  max-width: 200px; /* Matched max-width */
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Added subtle shadow */
+}
+
+.popupCloseButton:hover {
+  background-color: #444; /* Slightly lighter on hover */
+  border-color: #777; /* Lighter border on hover */
+  color: #fff; /* White text on hover */
+  transform: translateY(-1px); /* Slight lift effect */
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
 }
 
 .footer {
@@ -319,7 +347,7 @@
 
 .formContainer {
   width: 100%;
-  max-width: 900px;
+  max-width: 1000px; /* Increased max-width further */
   background: #1a1a1a;
   border-radius: 8px;
   padding: 1rem; /* Reduced padding */
@@ -438,13 +466,7 @@
 
 .form {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-areas:
-    "rc1 rc2 planet"
-    "rival rival rival"
-    "toggles toggles toggles"
-    "start-attack attack-interval stop-attack"
-    "start-defence defence-interval stop-defence";
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Adjusted for better spacing, allowing more columns if space permits */
   gap: 0.5rem;
   width: 100%;
   margin: 0;
