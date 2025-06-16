@@ -21,13 +21,11 @@ type FormData = {
   RC2_defenceIntervalTime: string;
   RC2_stopDefenceTime: string;
   PlanetName: string;
-  blackListRival: string;
-  whiteListMember: string;
+  Rival: string;
   standOnEnemy: boolean;
   actionOnEnemy: boolean;
   aiChatToggle: boolean;
   dualRCToggle: boolean;
-  kickAllToggle: boolean;
 };
 
 type ButtonState = { loading: boolean; active: boolean; text: string; };
@@ -58,8 +56,6 @@ const GalaxyForm: React.FC = () => {
   const [showThankYouMessage, setShowThankYouMessage] = useState<boolean>(false);
   const [activationProgressTimerId, setActivationProgressTimerId] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showRC2ValidationPopup, setShowRC2ValidationPopup] = useState<boolean>(false);
-  const [rc2ValidationMessage, setRC2ValidationMessage] = useState<string>('');
   const [activationProgressPercent, setActivationProgressPercent] = useState<number>(0);
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
@@ -111,8 +107,7 @@ const GalaxyForm: React.FC = () => {
       RC1_stopDefenceTime: '',
       RC1_defenceIntervalTime: '',
       PlanetName: '',
-      blackListRival: '',
-      whiteListMember: '',
+      Rival: '',
       RC2_startAttackTime: '',
       RC2_attackIntervalTime: '',
       RC2_stopAttackTime: '',
@@ -122,8 +117,7 @@ const GalaxyForm: React.FC = () => {
       standOnEnemy: false,
       actionOnEnemy: false,
       aiChatToggle: false,
-      dualRCToggle: false,
-      kickAllToggle: false
+      dualRCToggle: false
     };
   };
 
@@ -909,7 +903,7 @@ const GalaxyForm: React.FC = () => {
       'RC1_stopDefenceTime',
       'RC1_defenceIntervalTime',
       'PlanetName',
-      'blackListRival'
+      'Rival'
     ];
 
     const rc2Fields: (keyof FormData)[] = [
@@ -943,15 +937,6 @@ const GalaxyForm: React.FC = () => {
 
     // RC validation logic
     if (action === 'start') {
-      // New validation for Dual RC toggle and RC2
-      if (!formData.dualRCToggle && formData.RC1 && !formData.RC2) {
-        setError(['RC2']); // Highlight RC2 as missing
-        setRC2ValidationMessage(`RC2 (with Original RC) and it's time is mandatory to fill by enabling the Dual RC toggle in the specific Kick tab section. Once updated then you untoggle it to use Single RC.`);
-        setShowRC2ValidationPopup(true);
-        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
-        return;
-      }
-
       const allRcs = new Set<string>();
       let hasDuplicate = false;
       let duplicateMessage = '';
@@ -1063,8 +1048,7 @@ const GalaxyForm: React.FC = () => {
     const baseFields = [
       { key: 'RC1', label: 'RC1', placeholder: 'Enter RC1', color: '#FFFF00', type: 'text' },
       { key: 'PlanetName', label: 'Planet Name', placeholder: 'Enter Planet', color: '#FFFFFF', type: 'text' },
-      { key: 'blackListRival', label: 'BlackListRival', placeholder: 'Enter BlackListRival', color: '#FFA500', type: 'text' },
-      { key: 'whiteListMember', label: 'WhiteListMember', placeholder: 'Enter WhiteListMember', color: '#00FF00', type: 'text' },
+      { key: 'Rival', label: 'Rival', placeholder: 'Enter Rival', color: '#FFA500', type: 'text' },
       { key: 'RC1_startAttackTime', label: 'RC1 Start Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_attackIntervalTime', label: 'RC1 Attack Interval Time', placeholder: '', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'RC1_stopAttackTime', label: 'RC1 Stop Attack Time', placeholder: '', color: '#FF0000', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
@@ -1073,8 +1057,7 @@ const GalaxyForm: React.FC = () => {
       { key: 'RC1_stopDefenceTime', label: 'RC1 Stop Defence Time', placeholder: '', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'standOnEnemy', label: 'Stand On Enemy', color: '#FFFFFF', type: 'checkbox' },
       { key: 'actionOnEnemy', label: 'Action On Enemy', color: '#FFFFFF', type: 'checkbox' },
-      { key: 'dualRCToggle', label: 'Dual RC', color: '#FFFFFF', type: 'checkbox' },
-      { key: 'kickAllToggle', label: 'Kick All', color: '#FFFFFF', type: 'checkbox' }
+      { key: 'dualRCToggle', label: 'Dual RC', color: '#FFFFFF', type: 'checkbox' }
     ];
 
     const dualRCFields = [
@@ -1092,7 +1075,7 @@ const GalaxyForm: React.FC = () => {
         <div className={styles.form} style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           {currentFormData.dualRCToggle ? (
             <>
-              {/* First Row: RC1, RC2, Planet Name, BlackListRival, WhiteListMember */}
+              {/* First Row: RC1, RC2, Planet Name, Rival */}
               {[baseFields[0], dualRCFields[0], baseFields[1], baseFields[2]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
@@ -1155,7 +1138,7 @@ const GalaxyForm: React.FC = () => {
                 </div>
               ))}
               {/* Second Row: RC1 Attack Times + Stand On Enemy */}
-              {[baseFields[3], baseFields[4], baseFields[5], baseFields[6]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[baseFields[3], baseFields[4], baseFields[5], baseFields[9]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1217,7 +1200,7 @@ const GalaxyForm: React.FC = () => {
                 </div>
               ))}
               {/* Third Row: RC1 Defence Times + Action On Enemy */}
-              {[baseFields[10], baseFields[7], baseFields[8], baseFields[9]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[baseFields[6], baseFields[7], baseFields[8], baseFields[10]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1279,7 +1262,7 @@ const GalaxyForm: React.FC = () => {
                 </div>
               ))}
               {/* Fourth Row: RC2 Attack Times + Dual RC Toggle */}
-              {[baseFields[11], dualRCFields[1], dualRCFields[2], dualRCFields[3]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[dualRCFields[1], dualRCFields[2], dualRCFields[3], baseFields[11]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1341,69 +1324,7 @@ const GalaxyForm: React.FC = () => {
                 </div>
               ))}
               {/* Fifth Row: RC2 Defence Times */}
-              {[baseFields[12], dualRCFields[4], dualRCFields[5], dualRCFields[6]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
-                <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
-                  <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
-                  {type === 'checkbox' ? (
-                    <div
-                      onClick={() => {
-                        const currentValue = currentFormData[key as keyof FormData] as boolean;
-                        const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber - 1];
-                        setFormData(prev => ({ ...prev, [key]: !currentValue }));
-                        setToastMessage(null);
-                      }}
-                      style={{
-                        width: '40px',
-                        height: '24px',
-                        borderRadius: '12px',
-                        backgroundColor: currentFormData[key as keyof FormData] ? '#e74c3c' : '#444',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        transition: 'background-color 0.2s',
-                        marginTop: '5px'
-                      }}
-                    >
-                      <div
-                        style={{
-                          position: 'absolute',
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '50%',
-                          backgroundColor: 'white',
-                          top: '2px',
-                          left: currentFormData[key as keyof FormData] ? '18px' : '2px',
-                          transition: 'left 0.2s',
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <input
-                      type={type}
-                      name={key}
-                      value={currentFormData[key as keyof FormData] as string}
-                      onChange={handleInputChange(formNumber)}
-                      className={className || styles.input}
-                      maxLength={maxLength}
-                      autoComplete="off"
-                      onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
-                      placeholder={placeholder}
-                      style={{
-                        backgroundColor: '#2a2a2a',
-                        border: currentError.includes(key) ? '2px solid #ff4444' : '1px solid #444',
-                        color: '#fff',
-                        WebkitTextFillColor: '#fff',
-                        width: '100%',
-                        padding: '0.5rem',
-                        boxSizing: 'border-box',
-                        boxShadow: currentError.includes(key) ? '0 0 5px rgba(255,0,0,0.3)' : 'none'
-                      }}
-                      title={currentError.includes(key) ? `${label} is required` : undefined}
-                    />
-                  )}
-                </div>
-              ))}
-{/* Sixth Row: Kick All */}
-              {[baseFields[13]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[dualRCFields[4], dualRCFields[5], dualRCFields[6]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1468,7 +1389,7 @@ const GalaxyForm: React.FC = () => {
           ) : (
             <>
               {/* Original rendering logic for dualRCToggle false */}
-              {[baseFields[0], baseFields[1], baseFields[2], baseFields[3], baseFields[10]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[baseFields[0], baseFields[1], baseFields[2], baseFields[9]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1530,7 +1451,7 @@ const GalaxyForm: React.FC = () => {
                 </div>
               ))}
               {/* Second Row */}
-              {[baseFields[4], baseFields[5], baseFields[6], baseFields[11]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[baseFields[3], baseFields[4], baseFields[5], baseFields[10]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1592,7 +1513,7 @@ const GalaxyForm: React.FC = () => {
                 </div>
               ))}
               {/* Third Row */}
-              {[baseFields[7], baseFields[8], baseFields[9], baseFields[12], baseFields[13]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
+              {[baseFields[6], baseFields[7], baseFields[8], baseFields[11]].map(({ key, label, color, type, maxLength, className, placeholder }) => (
                 <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'left', width: '100%' }}>{label}</label>
                   {type === 'checkbox' ? (
@@ -1746,29 +1667,6 @@ const GalaxyForm: React.FC = () => {
           </button>
         </div>
       )}
-      {showRC2ValidationPopup && (
-        <div className={styles.popupOverlay}>
-          <div className={styles.popupContent} style={{ width: '400px' }}>
-            <h2 className={styles.popupTitle} style={{ color: '#f39c12' }}>
-              RC2 Required
-            </h2>
-            <p className={styles.popupMessage}>
-              {rc2ValidationMessage}
-            </p>
-            <div className={styles.popupActions}>
-              <button
-                onClick={() => setShowRC2ValidationPopup(false)}
-                className={styles.popupCloseButton}
-                style={{ border: '1px solid #555', backgroundColor: '#444', color: '#ccc', flex: 1 }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div className={styles.header}>
         <div>
           {displayedUsername && (
@@ -1804,13 +1702,13 @@ const GalaxyForm: React.FC = () => {
             <span className={`${styles.notificationBell} ${showNotificationBell ? styles.blinkingBell : ''}`}>
               <Bell size={16} />
               {showNotificationBell && (
-                <span style={{
-                  position: 'absolute',
-                  top: '0',
-                  right: '0',
-                  backgroundColor: 'red',
-                  borderRadius: '50%',
-                  width: '8px',
+                <span style={{ 
+                  position: 'absolute', 
+                  top: '0', 
+                  right: '0', 
+                  backgroundColor: 'red', 
+                  borderRadius: '50%', 
+                  width: '8px', 
                   height: '8px',
                   pointerEvents: 'none'
                 }} />
